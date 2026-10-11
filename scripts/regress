@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+# Regression gate for herdr-spotify. Run it after every change, before handing work back.
+#
+#   scripts/regress          every check, including the release build and a smoke run
+#   scripts/regress --quick  skip the release build and smoke run (inner loop)
+#
+# Exit status is 0 only when every stage passes. Logs land in target/regress/.
+# Nothing here signs in to Spotify or plays audio; that is checked by hand.
+
+set -u
+cd "$(dirname "$0")/.."
+ROOT=$PWD
+OUT=$ROOT/target/regress
+MAX_LINES=500
+
+quick=0
+for arg in "$@"; do
+    case $arg in
+        --quick) quick=1 ;;
+        -h | --help)
+            sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'
+            exit 0
+            ;;
+        *)
+            echo "unknown option: $arg (try --help)" >&2
+            exit 2
+            ;;
+    esac
+done
+
+rm -rf "$OUT"
+mkdir -p "$OUT"
+failed=()
+passed=0
+
+# stage NAME COMMAND...: run one check, keep its log, and report a single line.
+stage() {
+    local name=$1
+    shift
+    local log="$OUT/$name.log" started=$SECONDS
+    if "$@" >"$log" 2>&1; then
+        printf '  ok    %-16s %3ss\n' "$name" "$((SECONDS - started))"
+        passed=$((passed + 1))
+    else
+        printf '  FAIL  %-16s %3ss  log: %s\n' "$name" "$((SECONDS - started))" "${log#"$ROOT"/}"
+        if grep -q '^failures:$' "$log"; then
+            sed -n '/^failures:$/,$p' "$log" | head -n 80 | sed 's/^/        | /'
+        else
+            tail -n 40 "$log" | sed 's/^/        | /'
+        fi
+        failed+=("$name")
+    fi
+}
+
+# Rust files stay small enough to read in one sitting.
+check_file_sizes() {
+    local status=0 file lines
+    while IFS= read -r file; do
+        lines=$(wc -l <"$file")
+        if [ "$lines" -gt "$MAX_LINES" ]; then
+            echo "$file has $lines lines (limit $MAX_LINES)"
+            status=1
+        fi
+    done < <(find src tests -name '*.rs')
+    return $status
+}
+
+# A credential must never be written to a log or to standard output.
+check_no_secret_logging() {
+    if grep -rnE '(log::|println!|eprintln!)[^;]*(access_token|refresh_token)' src; then
+        echo "a token is passed to a log or print call"
+        return 1
+    fi
+}
+
+# The release binary starts a daemon, reports a signed-out state, and stops it again.
+smoke() {
+    local dir=/tmp/hs-smoke-$$ binary=$ROOT/target/release/herdr-spotify status=0
+    rm -rf "$dir"
+    mkdir -p "$dir"
+    export HERDR_PLUGIN_STATE_DIR=$dir HERDR_SPOTIFY_KEYCHAIN=herdr-spotify-smoke-$$
+    "$binary" status | grep -qx 'Not signed in. Run: herdr-spotify login' || status=1
+    [ -S "$dir/daemon.sock" ] || { echo "no socket"; status=1; }
+    "$binary" daemon stop | grep -qx 'Stopped.' || status=1
+    [ ! -e "$dir/daemon.sock" ] || { echo "socket left behind"; status=1; }
+    cat "$dir/daemon.log"
+    rm -rf "$dir"
+    return $status
+}
+
+echo "herdr-spotify regression gate"
+stage format cargo fmt --check
+stage lint cargo clippy --locked --all-targets -- -D warnings
+stage tests cargo test --locked
+stage file-sizes check_file_sizes
+stage no-secret-logs check_no_secret_logging
+if [ "$quick" -eq 0 ]; then
+    stage release-build cargo build --release --locked
+    stage smoke smoke
+fi
+
+echo
+if [ "${#failed[@]}" -eq 0 ]; then
+    echo "PASS ($passed stages)"
+else
+    echo "FAIL: ${failed[*]}"
+    exit 1
+fi
