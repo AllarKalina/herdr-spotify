@@ -1,0 +1,40 @@
+
+  Spotify
+
+  The player is not running.
+  It stopped.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  Enter restart · Esc close
+
+
+styles:
+ 1   2-8   fg:LightCyan BOLD
+ 3   2-27  fg:Red
+ 4   2-12  fg:Gray

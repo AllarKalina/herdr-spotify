@@ -1,0 +1,102 @@
+
+  Spotify
+
+  LIBRARY
+  ♥ Liked Songs                                                                          ▶ playing
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  ▀▀▀▀▀▀▀▀▀▀  Hide Away                                                                  ▶ playing
+  ▀▀▀▀▀▀▀▀▀▀  Daya · Sit Still, Look Pretty
+  ▀▀▀▀▀▀▀▀▀▀
+  ▀▀▀▀▀▀▀▀▀▀  ━━━━━━──────────────────────────────────────────────────────────────────────────────
+  ▀▀▀▀▀▀▀▀▀▀  0:15 / 3:11                                    volume 50% · shuffle off · repeat off
+  Track unavailable: spotify:track:2
+  Enter play · Space pause · n/p skip · ←/→ seek · -/+ volume · s shuffle · r repeat · Esc close
+
+
+styles:
+ 1   2-8   fg:LightCyan BOLD
+ 3   2-97  fg:Gray
+ 4   2-97  fg:Black bg:Cyan BOLD
+27   2-2   fg:#000078 bg:#190078
+27   3-3   fg:#001978 bg:#191978
+27   4-4   fg:#003278 bg:#193278
+27   5-5   fg:#004B78 bg:#194B78
+27   6-6   fg:#006478 bg:#196478
+27   7-7   fg:#007D78 bg:#197D78
+27   8-8   fg:#009678 bg:#199678
+27   9-9   fg:#00AF78 bg:#19AF78
+27  10-10  fg:#00C878 bg:#19C878
+27  11-11  fg:#00E178 bg:#19E178
+27  14-22  BOLD
+27  89-97  fg:LightCyan BOLD
+28   2-2   fg:#320078 bg:#4B0078
+28   3-3   fg:#321978 bg:#4B1978
+28   4-4   fg:#323278 bg:#4B3278
+28   5-5   fg:#324B78 bg:#4B4B78
+28   6-6   fg:#326478 bg:#4B6478
+28   7-7   fg:#327D78 bg:#4B7D78
+28   8-8   fg:#329678 bg:#4B9678
+28   9-9   fg:#32AF78 bg:#4BAF78
+28  10-10  fg:#32C878 bg:#4BC878
+28  11-11  fg:#32E178 bg:#4BE178
+28  14-97  fg:Gray
+29   2-2   fg:#640078 bg:#7D0078
+29   3-3   fg:#641978 bg:#7D1978
+29   4-4   fg:#643278 bg:#7D3278
+29   5-5   fg:#644B78 bg:#7D4B78
+29   6-6   fg:#646478 bg:#7D6478
+29   7-7   fg:#647D78 bg:#7D7D78
+29   8-8   fg:#649678 bg:#7D9678
+29   9-9   fg:#64AF78 bg:#7DAF78
+29  10-10  fg:#64C878 bg:#7DC878
+29  11-11  fg:#64E178 bg:#7DE178
+30   2-2   fg:#960078 bg:#AF0078
+30   3-3   fg:#961978 bg:#AF1978
+30   4-4   fg:#963278 bg:#AF3278
+30   5-5   fg:#964B78 bg:#AF4B78
+30   6-6   fg:#966478 bg:#AF6478
+30   7-7   fg:#967D78 bg:#AF7D78
+30   8-8   fg:#969678 bg:#AF9678
+30   9-9   fg:#96AF78 bg:#AFAF78
+30  10-10  fg:#96C878 bg:#AFC878
+30  11-11  fg:#96E178 bg:#AFE178
+30  14-19  fg:Cyan
+30  20-97  fg:DarkGray
+31   2-2   fg:#C80078 bg:#E10078
+31   3-3   fg:#C81978 bg:#E11978
+31   4-4   fg:#C83278 bg:#E13278
+31   5-5   fg:#C84B78 bg:#E14B78
+31   6-6   fg:#C86478 bg:#E16478
+31   7-7   fg:#C87D78 bg:#E17D78
+31   8-8   fg:#C89678 bg:#E19678
+31   9-9   fg:#C8AF78 bg:#E1AF78
+31  10-10  fg:#C8C878 bg:#E1C878
+31  11-11  fg:#C8E178 bg:#E1E178
+31  14-24  fg:Gray
+31  61-67  fg:Gray
+31  71-73  fg:DarkGray
+31  74-81  fg:Gray
+31  85-87  fg:DarkGray
+31  88-94  fg:Gray
+32   2-97  fg:Red

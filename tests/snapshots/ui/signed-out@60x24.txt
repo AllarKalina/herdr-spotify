@@ -1,0 +1,29 @@
+
+  Spotify
+
+  Not signed in on this computer.
+  In a terminal: herdr-spotify login
+  Then press Enter here.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  Enter retry · Esc close
+
+
+styles:
+ 1   2-8   fg:LightCyan BOLD
+ 4   2-35  fg:Gray
+ 5   2-23  fg:Gray

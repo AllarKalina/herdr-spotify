@@ -65,12 +65,12 @@ impl Connection {
             daemon_build: String::new(),
         };
         connection.set_timeout(Some(START_WAIT))?;
-        match connection.read()? {
-            Some(Message::Hello {
+        match connection.read() {
+            Ok(Some(Message::Hello {
                 protocol,
                 build,
                 pid,
-            }) => {
+            })) => {
                 connection.daemon_pid = pid;
                 // A different protocol is a different build by definition.
                 connection.daemon_build = if protocol == PROTOCOL {
@@ -79,7 +79,13 @@ impl Connection {
                     format!("protocol-{protocol}")
                 };
             }
-            other => return Err(format!("Unexpected greeting from the daemon: {other:?}").into()),
+            // Nothing is serving this socket: a daemon that is gone, or one on its way out.
+            Ok(None) => return Ok(None),
+            Err(error) if hung_up(&error) => return Ok(None),
+            Ok(Some(other)) => {
+                return Err(format!("Unexpected greeting from the daemon: {other:?}").into());
+            }
+            Err(error) => return Err(error),
         }
         connection.set_timeout(None)?;
         Ok(Some(connection))
@@ -116,10 +122,35 @@ impl Connection {
         }
     }
 
+    /// A second handle for sending, so one thread can read while another writes.
+    pub fn sender(&self) -> Result<Sender> {
+        Ok(Sender(self.writer.try_clone()?))
+    }
+
     fn set_timeout(&mut self, timeout: Option<Duration>) -> Result<()> {
         self.reader.get_ref().set_read_timeout(timeout)?;
         Ok(())
     }
+}
+
+/// The sending half of a connection.
+pub struct Sender(UnixStream);
+
+impl Sender {
+    pub fn send(&mut self, request: &Request) -> Result<()> {
+        self.0.write_all(encode(request)?.as_bytes())?;
+        Ok(())
+    }
+}
+
+/// True when a read failed because the other end went away.
+fn hung_up(error: &crate::Error) -> bool {
+    error.downcast_ref::<std::io::Error>().is_some_and(|error| {
+        matches!(
+            error.kind(),
+            ErrorKind::ConnectionReset | ErrorKind::BrokenPipe
+        )
+    })
 }
 
 /// Stops the daemon if one is running. Returns whether there was one.

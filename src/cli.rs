@@ -3,12 +3,14 @@
 use crate::client::{self, Connection};
 use crate::paths::Paths;
 use crate::protocol::{Message, Repeat, Request, State, Status, now_ms};
-use crate::{Result, daemon, login};
+use crate::{Result, daemon, login, ui};
 use std::time::{Duration, Instant};
 
 const USAGE: &str = "\
 Usage: herdr-spotify <command>
 
+  open                        Open the player popup in Herdr
+  tui                         Run the player interface in this terminal
   login                       Sign in to Spotify for audio playback on this computer
   status [--json]             Show what is playing (starts the daemon if needed)
   ctl <action>                Control playback:
@@ -39,11 +41,33 @@ pub fn run(args: Vec<String>) -> Result<()> {
             Ok(())
         }
         ["login"] => login::run(&Paths::from_env()?),
+        ["tui"] => ui::run(&Paths::from_env()?),
+        ["open"] => open_popup(),
         ["status"] => status(false),
         ["status", "--json"] => status(true),
         ["ctl", action @ ..] => ctl(&parse_action(action)?),
         _ => Err(format!("Unknown command: {}\n\n{USAGE}", args.join(" ")).into()),
     }
+}
+
+/// Opens the popup through Herdr. Works from a keybinding, with or without a pane.
+fn open_popup() -> Result<()> {
+    let herdr = std::env::var_os("HERDR_BIN_PATH").unwrap_or_else(|| "herdr".into());
+    let status = std::process::Command::new(herdr)
+        .args([
+            "plugin",
+            "pane",
+            "open",
+            "--plugin",
+            "personal.spotify",
+            "--entrypoint",
+            "player",
+        ])
+        .status()?;
+    if !status.success() {
+        return Err("Could not open the Spotify popup".into());
+    }
+    Ok(())
 }
 
 fn status(json: bool) -> Result<()> {

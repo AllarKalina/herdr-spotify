@@ -1,0 +1,31 @@
+
+  Spotify
+
+  LIBRARY
+  ♥ Liked Songs
+
+
+
+
+
+
+
+
+
+
+
+
+
+  Nothing playing
+  Press Enter to play the selection.
+
+
+  ↵ play · Space pause · n/p skip · Esc close
+
+
+styles:
+ 1   2-8   fg:LightCyan BOLD
+ 3   2-57  fg:Gray
+ 4   2-57  fg:Black bg:Cyan BOLD
+18   2-16  fg:Gray
+19   2-35  fg:DarkGray

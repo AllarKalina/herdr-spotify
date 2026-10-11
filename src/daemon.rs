@@ -1,5 +1,6 @@
 //! The background process: holds the lock, serves the socket, and runs the player.
 
+mod cover;
 pub mod player;
 pub mod server;
 pub mod state;

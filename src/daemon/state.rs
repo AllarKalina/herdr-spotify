@@ -21,6 +21,12 @@ pub enum Change {
     Shuffle(bool),
     Repeat(Repeat),
     Context(Option<String>),
+    User(Option<String>),
+    /// The cover of the named track has been fetched to a local file.
+    Cover {
+        track_uri: String,
+        path: String,
+    },
     Status(Status, Option<String>),
 }
 
@@ -33,7 +39,16 @@ pub fn apply(state: &mut State, change: Change, now_ms: u64) -> bool {
                 state.position_ms = 0;
                 state.position_at_ms = now_ms;
             }
-            state.track = Some(track);
+            // The same track reported again must not lose the cover already fetched for it.
+            let cover = state
+                .track
+                .take()
+                .filter(|current| current.uri == track.uri)
+                .and_then(|current| current.cover_path);
+            state.track = Some(Track {
+                cover_path: track.cover_path.or(cover),
+                ..track
+            });
         }
         Change::Playing { position_ms } => set_position(state, true, position_ms, now_ms),
         Change::Paused { position_ms } => set_position(state, false, position_ms, now_ms),
@@ -43,6 +58,12 @@ pub fn apply(state: &mut State, change: Change, now_ms: u64) -> bool {
         Change::Shuffle(shuffle) => state.shuffle = shuffle,
         Change::Repeat(repeat) => state.repeat = repeat,
         Change::Context(uri) => state.context_uri = uri,
+        Change::User(user) => state.user = user,
+        Change::Cover { track_uri, path } => {
+            if let Some(track) = state.track.as_mut().filter(|track| track.uri == track_uri) {
+                track.cover_path = Some(path);
+            }
+        }
         Change::Status(status, problem) => {
             state.status = status;
             state.problem = problem;
@@ -147,6 +168,23 @@ mod tests {
         );
         assert_eq!((state.playing, state.position_ms), (false, 5_000));
         assert_eq!(state.problem.as_deref(), Some("offline"));
+    }
+
+    #[test]
+    fn a_cover_attaches_to_its_own_track_and_survives_a_repeat_report() {
+        let mut state = State::default();
+        apply(&mut state, Change::Track(track("a")), 0);
+        let cover = |uri: &str| Change::Cover {
+            track_uri: uri.into(),
+            path: "/c.jpg".into(),
+        };
+        assert!(
+            !apply(&mut state, cover("b"), 1),
+            "a late cover for another track is dropped"
+        );
+        assert!(apply(&mut state, cover("a"), 1));
+        apply(&mut state, Change::Track(track("a")), 2);
+        assert_eq!(state.track.unwrap().cover_path.as_deref(), Some("/c.jpg"));
     }
 
     #[test]

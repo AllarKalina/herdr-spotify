@@ -70,6 +70,11 @@ impl Paths {
         self.state.join("audio-credentials")
     }
 
+    /// Cover images of recently played tracks.
+    pub fn covers(&self) -> PathBuf {
+        self.state.join("covers")
+    }
+
     /// The identity this computer presents to Spotify, kept so restarts are the same device.
     pub fn device_id(&self) -> PathBuf {
         self.state.join("device-id")

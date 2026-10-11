@@ -1,0 +1,26 @@
+id = "personal.spotify"
+name = "Personal Spotify"
+version = "0.1.0"
+min_herdr_version = "0.9.1"
+description = "Local Spotify player"
+platforms = ["macos"]
+
+[[build]]
+platforms = ["macos"]
+command = ["cargo", "build", "--release", "--locked", "--bin", "herdr-spotify"]
+
+[[panes]]
+id = "player"
+# Herdr requires a nonempty title; a zero-width space leaves the frame unlabeled.
+# The application renders its own anchored Spotify header inside the popup.
+title = "​"
+placement = "popup"
+width = "85%"
+height = "85%"
+command = ["./target/release/herdr-spotify", "tui"]
+
+[[actions]]
+id = "open"
+title = "Open Spotify"
+description = "Open the local Spotify player"
+command = ["./target/release/herdr-spotify", "open"]

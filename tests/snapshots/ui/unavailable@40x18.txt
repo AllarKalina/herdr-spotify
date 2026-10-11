@@ -1,0 +1,24 @@
+
+  Spotify
+
+  Playback is unavailable.
+  Cannot reach Spotify: the network is
+  down
+
+
+
+
+
+
+
+
+
+
+  Enter retry · Esc close
+
+
+styles:
+ 1   2-8   fg:LightCyan BOLD
+ 3   2-25  fg:Red
+ 4   2-37  fg:Gray
+ 5   2-5   fg:Gray

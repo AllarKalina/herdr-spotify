@@ -51,6 +51,8 @@ pub enum Request {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         index: Option<u32>,
     },
+    /// Try again to reach Spotify after a failure or a sign-in.
+    Retry,
     /// Stop the daemon.
     Shutdown,
 }
@@ -58,6 +60,9 @@ pub enum Request {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct State {
     pub status: Status,
+    /// The signed-in Spotify user, once connected.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user: Option<String>,
     /// Why playback is unavailable, when `status` says it is.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub problem: Option<String>,
@@ -104,8 +109,9 @@ pub struct Track {
     pub artists: Vec<String>,
     pub album: String,
     pub duration_ms: u32,
+    /// The cover image as a local JPEG file, once the daemon has fetched it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cover_url: Option<String>,
+    pub cover_path: Option<String>,
 }
 
 impl State {

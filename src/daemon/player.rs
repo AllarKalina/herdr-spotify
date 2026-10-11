@@ -1,6 +1,7 @@
 //! The Spotify side: a librespot Connect device that plays on this computer.
 
 use super::PlayerEnd;
+use super::cover;
 use super::state::{self, Change};
 use crate::paths::Paths;
 use crate::protocol::{Repeat, Request, Status, Track, now_ms};
@@ -37,6 +38,7 @@ struct Connected {
     spirc: Spirc,
     task: Pin<Box<dyn Future<Output = ()> + Send>>,
     events: PlayerEventChannel,
+    user: String,
 }
 
 /// Keeps a session up for as long as the daemon runs. Without one, each request is a reason
@@ -47,12 +49,13 @@ pub async fn run(mut end: PlayerEnd, paths: Paths) {
         change(&end, Change::Status(Status::Connecting, None));
         let retry_now = match connect(&paths).await {
             Ok(mut connected) => {
+                change(&end, Change::User(Some(connected.user.clone())));
                 change(&end, Change::Status(Status::Ready, None));
                 if let Some(request) = pending.take() {
                     handle(&connected.spirc, request, &end);
                 }
                 let started = Instant::now();
-                match drive(&mut connected, &mut end).await {
+                match drive(&mut connected, &mut end, &paths).await {
                     Ended::Stop => return,
                     Ended::Lost => {
                         log::warn!("Spotify session ended");
@@ -142,11 +145,12 @@ async fn connect(paths: &Paths) -> std::result::Result<Connected, Failure> {
         spirc,
         task: Box::pin(task),
         events,
+        user: session.username(),
     })
 }
 
 /// Runs one session: requests in, player events out.
-async fn drive(connected: &mut Connected, end: &mut PlayerEnd) -> Ended {
+async fn drive(connected: &mut Connected, end: &mut PlayerEnd, paths: &Paths) -> Ended {
     loop {
         tokio::select! {
             () = &mut connected.task => return Ended::Lost,
@@ -156,7 +160,7 @@ async fn drive(connected: &mut Connected, end: &mut PlayerEnd) -> Ended {
                 None => break,
             },
             event = connected.events.recv() => match event {
-                Some(event) => report(event, end),
+                Some(event) => report(event, end, paths),
                 None => return Ended::Lost,
             },
         }
@@ -190,8 +194,8 @@ fn handle(spirc: &Spirc, request: Request, end: &PlayerEnd) {
                 .activate()
                 .and_then(|()| spirc.load(LoadRequest::from_context_uri(uri, options)))
         }
-        // The server answers this one itself.
-        Request::Shutdown => Ok(()),
+        // Retry only matters without a session; the server answers Shutdown itself.
+        Request::Retry | Request::Shutdown => Ok(()),
     };
     if let Err(error) = outcome {
         log::warn!("request failed: {error}");
@@ -199,9 +203,12 @@ fn handle(spirc: &Spirc, request: Request, end: &PlayerEnd) {
     }
 }
 
-fn report(event: PlayerEvent, end: &PlayerEnd) {
+fn report(event: PlayerEvent, end: &PlayerEnd, paths: &Paths) {
     let reported = match event {
-        PlayerEvent::TrackChanged { audio_item } => Change::Track(track(&audio_item)),
+        PlayerEvent::TrackChanged { audio_item } => {
+            fetch_cover(&audio_item, end, paths);
+            Change::Track(track(&audio_item))
+        }
         PlayerEvent::Playing { position_ms, .. } => Change::Playing { position_ms },
         PlayerEvent::Paused { position_ms, .. } => Change::Paused { position_ms },
         PlayerEvent::Seeked { position_ms, .. }
@@ -226,6 +233,25 @@ fn change(end: &PlayerEnd, change: Change) {
         .send_if_modified(|current| state::apply(current, change, now_ms()));
 }
 
+/// Fetches the track's cover in the background and reports the file when it is there.
+fn fetch_cover(item: &AudioItem, end: &PlayerEnd, paths: &Paths) {
+    // A terminal cover is a few cells wide; the smallest image is plenty.
+    let smallest = item.covers.iter().min_by_key(|cover| cover.width);
+    let Some(url) = smallest.map(|cover| cover.url.clone()) else {
+        return;
+    };
+    let (state, paths, track_uri) = (end.state.clone(), paths.clone(), item.uri.clone());
+    tokio::spawn(async move {
+        match cover::fetch(&paths, &url).await {
+            Ok(path) => {
+                let reported = Change::Cover { track_uri, path };
+                state.send_if_modified(|current| state::apply(current, reported, now_ms()));
+            }
+            Err(error) => log::warn!("cover not fetched: {error}"),
+        }
+    });
+}
+
 fn track(item: &AudioItem) -> Track {
     let (artists, album) = match &item.unique_fields {
         UniqueFields::Track { artists, album, .. } => (
@@ -244,8 +270,7 @@ fn track(item: &AudioItem) -> Track {
         artists,
         album,
         duration_ms: item.duration_ms,
-        // Covers come largest first; the smallest is plenty for a terminal.
-        cover_url: item.covers.last().map(|cover| cover.url.clone()),
+        cover_path: None,
     }
 }
 

@@ -1,0 +1,28 @@
+
+  Spotify
+
+  Connecting to Spotify…
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  Esc close
+
+
+styles:
+ 1   2-8   fg:LightCyan BOLD
+ 3   2-23  fg:Gray

@@ -1,0 +1,22 @@
+
+  Spotify
+
+  Starting the player…
+
+
+
+
+
+
+
+
+
+
+
+
+  Esc close
+
+
+styles:
+ 1   2-8   fg:LightCyan BOLD
+ 3   2-21  fg:Gray

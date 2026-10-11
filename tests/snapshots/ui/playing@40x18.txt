@@ -1,0 +1,30 @@
+
+  Spotify
+
+  LIBRARY
+  ♥ Liked Songs              ▶ playing
+
+
+
+
+
+  Hide Away                  ▶ playing
+  Daya · Sit Still, Look Pretty
+
+  ━━──────────────────────────────────
+  0:15 / 3:11               volume 50%
+
+  ↵ play · Space pause · Esc
+
+
+styles:
+ 1   2-8   fg:LightCyan BOLD
+ 3   2-37  fg:Gray
+ 4   2-37  fg:Black bg:Cyan BOLD
+10   2-10  BOLD
+10  29-37  fg:LightCyan BOLD
+11   2-37  fg:Gray
+13   2-3   fg:Cyan
+13   4-37  fg:DarkGray
+14   2-12  fg:Gray
+14  28-34  fg:Gray

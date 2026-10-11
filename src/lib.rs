@@ -8,6 +8,7 @@ pub mod daemon;
 pub mod login;
 pub mod paths;
 pub mod protocol;
+pub mod ui;
 
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
 pub type Result<T> = std::result::Result<T, Error>;
