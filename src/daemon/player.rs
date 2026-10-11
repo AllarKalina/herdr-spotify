@@ -2,11 +2,12 @@
 
 use super::PlayerEnd;
 use super::cover;
+use super::playback::Playback;
 use super::state::{self, Change};
 use crate::paths::Paths;
-use crate::protocol::{Message, Repeat, Request, Status, Track, now_ms};
+use crate::protocol::{Message, Request, Status, Track, now_ms};
 use crate::{Result, credentials, login};
-use librespot_connect::{ConnectConfig, LoadRequest, LoadRequestOptions, PlayingTrack, Spirc};
+use librespot_connect::{ConnectConfig, Spirc};
 use librespot_core::{authentication::Credentials, config::SessionConfig, session::Session};
 use librespot_metadata::audio::{AudioItem, UniqueFields};
 use librespot_playback::audio_backend;
@@ -20,6 +21,8 @@ use std::time::{Duration, Instant};
 /// A session that lasted this long and then dropped is reconnected without being asked.
 const STABLE_SESSION: Duration = Duration::from_secs(30);
 const SPIRC_STOP_WAIT: Duration = Duration::from_secs(2);
+/// How often the resume point is looked at while nothing else happens.
+const SAVE_TICK: Duration = Duration::from_secs(5);
 const SIGN_IN_HINT: &str = "Not signed in. Run: herdr-spotify login";
 
 enum Failure {
@@ -44,18 +47,22 @@ struct Connected {
 /// Keeps a session up for as long as the daemon runs. Without one, each request is a reason
 /// to try again; nothing retries on a timer.
 pub async fn run(mut end: PlayerEnd, paths: Paths) {
+    let mut playback = Playback::restore(&end, &paths);
     let mut pending: Option<Request> = None;
     loop {
         change(&end, Change::Status(Status::Connecting, None));
-        let retry_now = match connect(&paths).await {
+        let retry_now = match connect(&paths, playback.volume()).await {
             Ok(mut connected) => {
                 change(&end, Change::User(Some(connected.user.clone())));
                 change(&end, Change::Status(Status::Ready, None));
                 if let Some(request) = pending.take() {
-                    handle(&connected.spirc, request, &end);
+                    playback.handle(&connected.spirc, request, &end);
                 }
                 let started = Instant::now();
-                match drive(&mut connected, &mut end, &paths).await {
+                let ended = drive(&mut connected, &mut end, &paths, &mut playback).await;
+                playback.save(&end, &paths, true);
+                playback.session_ended();
+                match ended {
                     Ended::Stop => return,
                     Ended::Lost => {
                         log::warn!("Spotify session ended");
@@ -92,7 +99,7 @@ pub async fn run(mut end: PlayerEnd, paths: Paths) {
     }
 }
 
-async fn connect(paths: &Paths) -> std::result::Result<Connected, Failure> {
+async fn connect(paths: &Paths, volume: Option<u8>) -> std::result::Result<Connected, Failure> {
     let unavailable = |error: &dyn std::fmt::Display| Failure::Unavailable(error.to_string());
 
     let Some(refresh_token) = credentials::audio(paths).map_err(|e| unavailable(&e))? else {
@@ -132,9 +139,11 @@ async fn connect(paths: &Paths) -> std::result::Result<Connected, Failure> {
         move || sink(None, AudioFormat::default()),
     );
     let events = player.get_player_event_channel();
+    let defaults = ConnectConfig::default();
     let config = ConnectConfig {
         name: device_name(),
-        ..ConnectConfig::default()
+        initial_volume: volume.map_or(defaults.initial_volume, state::volume_raw),
+        ..defaults
     };
     let credentials = Credentials::with_access_token(token.access_token);
     let (spirc, task) = Spirc::new(config, session.clone(), credentials, player, mixer)
@@ -150,80 +159,36 @@ async fn connect(paths: &Paths) -> std::result::Result<Connected, Failure> {
 }
 
 /// Runs one session: requests in, player events out.
-async fn drive(connected: &mut Connected, end: &mut PlayerEnd, paths: &Paths) -> Ended {
+async fn drive(
+    connected: &mut Connected,
+    end: &mut PlayerEnd,
+    paths: &Paths,
+    playback: &mut Playback,
+) -> Ended {
+    let mut tick = tokio::time::interval(SAVE_TICK);
     loop {
         tokio::select! {
             () = &mut connected.task => return Ended::Lost,
             () = end.stop.notified() => break,
             request = end.requests.recv() => match request {
-                Some(request) => handle(&connected.spirc, request, end),
+                Some(request) => playback.handle(&connected.spirc, request, end),
                 None => break,
             },
             event = connected.events.recv() => match event {
-                Some(event) => report(event, end, paths),
+                Some(event) => {
+                    if playback.observe(&event) {
+                        report(event, end, paths);
+                    }
+                }
                 None => return Ended::Lost,
             },
+            _ = tick.tick() => {}
         }
+        playback.save(end, paths, false);
     }
     let _ = connected.spirc.shutdown();
     let _ = tokio::time::timeout(SPIRC_STOP_WAIT, &mut connected.task).await;
     Ended::Stop
-}
-
-fn handle(spirc: &Spirc, request: Request, end: &PlayerEnd) {
-    let outcome = match request {
-        Request::Play => spirc.play(),
-        Request::Pause => spirc.pause(),
-        Request::Toggle => spirc.play_pause(),
-        Request::Next => spirc.next(),
-        Request::Previous => spirc.prev(),
-        Request::Seek { position_ms } => spirc.set_position_ms(position_ms),
-        Request::Volume { percent } => spirc.set_volume(state::volume_raw(percent)),
-        Request::Shuffle { on } => spirc.shuffle(on),
-        Request::Repeat { mode } => spirc
-            .repeat(mode == Repeat::Context)
-            .and_then(|()| spirc.repeat_track(mode == Repeat::Track)),
-        Request::PlayContext {
-            uri,
-            index,
-            track_uri,
-        } => {
-            let playing_track = track_uri
-                .map(PlayingTrack::Uri)
-                .or(index.map(PlayingTrack::Index));
-            let options = LoadRequestOptions {
-                start_playing: true,
-                playing_track,
-                ..LoadRequestOptions::default()
-            };
-            change(end, Change::Context(Some(uri.clone())));
-            spirc
-                .activate()
-                .and_then(|()| spirc.load(LoadRequest::from_context_uri(uri, options)))
-        }
-        Request::PlayTracks { uris, index } => {
-            let options = LoadRequestOptions {
-                start_playing: true,
-                playing_track: Some(PlayingTrack::Index(index)),
-                ..LoadRequestOptions::default()
-            };
-            change(end, Change::Context(None));
-            spirc
-                .activate()
-                .and_then(|()| spirc.load(LoadRequest::from_tracks(uris, options)))
-        }
-        // Retry only matters without a session; the rest are answered elsewhere.
-        Request::Retry
-        | Request::Shutdown
-        | Request::GetLibrary { .. }
-        | Request::GetTracks { .. }
-        | Request::MoreTracks { .. }
-        | Request::Search { .. } => Ok(()),
-    };
-    if let Err(error) = outcome {
-        log::warn!("request failed: {error}");
-        notice(end, format!("Spotify request failed: {error}"));
-    }
 }
 
 fn report(event: PlayerEvent, end: &PlayerEnd, paths: &Paths) {

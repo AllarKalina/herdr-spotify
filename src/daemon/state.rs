@@ -1,5 +1,6 @@
 //! How player events change the state clients see. Pure, so it is tested without Spotify.
 
+use super::resume::Resume;
 use crate::protocol::{Repeat, State, Status, Track};
 
 /// Something the player reported.
@@ -28,6 +29,8 @@ pub enum Change {
         path: String,
     },
     Status(Status, Option<String>),
+    /// What was playing when the last daemon stopped, shown paused.
+    Restore(Resume),
 }
 
 /// Applies `change`. Returns false when nothing a client can see changed, so no update is sent.
@@ -63,6 +66,14 @@ pub fn apply(state: &mut State, change: Change, now_ms: u64) -> bool {
             if let Some(track) = state.track.as_mut().filter(|track| track.uri == track_uri) {
                 track.cover_path = Some(path);
             }
+        }
+        Change::Restore(resume) => {
+            state.track = Some(resume.track);
+            state.context_uri = resume.context_uri;
+            state.volume = resume.volume.min(100);
+            state.shuffle = resume.shuffle;
+            state.repeat = resume.repeat;
+            set_position(state, false, resume.position_ms, now_ms);
         }
         Change::Status(status, problem) => {
             state.status = status;
@@ -185,6 +196,35 @@ mod tests {
         assert!(apply(&mut state, cover("a"), 1));
         apply(&mut state, Change::Track(track("a")), 2);
         assert_eq!(state.track.unwrap().cover_path.as_deref(), Some("/c.jpg"));
+    }
+
+    #[test]
+    fn a_restored_point_shows_as_a_paused_track() {
+        let mut state = State::default();
+        let resume = Resume {
+            context_uri: Some("spotify:playlist:p".into()),
+            uris: Vec::new(),
+            track: track("a"),
+            position_ms: 42_000,
+            volume: 35,
+            shuffle: true,
+            repeat: Repeat::Track,
+        };
+        assert!(apply(&mut state, Change::Restore(resume), 9));
+        assert_eq!(
+            (state.playing, state.position_ms, state.position_at_ms),
+            (false, 42_000, 9)
+        );
+        assert_eq!(
+            (state.volume, state.shuffle, state.repeat),
+            (35, true, Repeat::Track)
+        );
+        assert_eq!(state.context_uri.as_deref(), Some("spotify:playlist:p"));
+        assert_eq!(
+            state.position_at(60_000),
+            42_000,
+            "paused: it does not advance"
+        );
     }
 
     #[test]

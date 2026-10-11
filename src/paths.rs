@@ -90,6 +90,11 @@ impl Paths {
         self.state.join("cache")
     }
 
+    /// Where playback was; see `daemon::resume`.
+    pub fn resume(&self) -> PathBuf {
+        self.state.join("resume.json")
+    }
+
     /// The identity this computer presents to Spotify, kept so restarts are the same device.
     pub fn device_id(&self) -> PathBuf {
         self.state.join("device-id")

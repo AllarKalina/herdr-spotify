@@ -200,3 +200,36 @@ fn browsing_without_a_sign_in_says_how_to_get_one() {
         "Browsing needs its own sign-in. Run: herdr-spotify login"
     );
 }
+
+#[test]
+fn a_new_daemon_shows_what_was_playing_before_as_a_paused_track() {
+    let sandbox = Sandbox::new();
+    let resume = serde_json::json!({
+        "context_uri": "spotify:playlist:p1",
+        "track": {
+            "uri": "spotify:track:t1", "name": "Hide Away", "artists": ["Daya"],
+            "album": "Sit Still, Look Pretty", "duration_ms": 191_000
+        },
+        "position_ms": 68_000, "volume": 35, "shuffle": true, "repeat": "context"
+    });
+    std::fs::write(sandbox.dir.join("resume.json"), resume.to_string()).expect("resume file");
+
+    let state = &sandbox.status()["state"];
+    assert_eq!(state["track"]["name"], "Hide Away");
+    assert_eq!(state["playing"], false);
+    assert_eq!(state["position_ms"], 68_000);
+    assert_eq!(state["context_uri"], "spotify:playlist:p1");
+    assert_eq!(
+        (&state["volume"], &state["shuffle"], &state["repeat"]),
+        (&35.into(), &true.into(), &"context".into())
+    );
+}
+
+#[test]
+fn a_damaged_resume_file_is_ignored() {
+    let sandbox = Sandbox::new();
+    std::fs::write(sandbox.dir.join("resume.json"), "{not json").expect("resume file");
+    let state = &sandbox.status()["state"];
+    assert!(state["track"].is_null());
+    assert_eq!(state["status"], "signed_out");
+}

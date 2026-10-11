@@ -24,9 +24,9 @@ A local Spotify player inside Herdr. This computer plays the audio itself throug
 
 ## Capabilities and Constraints
 
-- Built: the daemon, both sign-ins, transport (play, pause, next, previous, seek, volume, shuffle, repeat), the library of playlists and Liked Songs, a track view that loads 50 tracks at a time as you scroll, search for songs and playlists, and cover art.
-- Not built yet: resuming after a daemon restart, mouse support, albums and artists in search.
-- Play, pause and skip do nothing until this computer is the active Spotify device, which starting a context makes it.
+- Built: the daemon, both sign-ins, transport (play, pause, next, previous, seek, volume, shuffle, repeat), the library of playlists and Liked Songs, a track view that loads 50 tracks at a time as you scroll, search for songs and playlists, cover art, and resuming where playback stopped after the daemon restarts.
+- Not built yet: mouse support, albums and artists in search.
+- A new daemon shows the last track paused at its position. The first press of play, or of next or previous, loads it back with the same playlist, volume, shuffle and repeat; until then this computer does not take playback away from another device.
 - Spotify Web API calls happen only when needed, under a tested call budget; player state never comes from the Web API.
 - The audio sign-in is a refresh token in a file only the user can read, in the plugin's state directory. No hosted backend, no sync between the two Macs.
 - Playback uses librespot, an unofficial Spotify client library. Spotify can break it; the popup must say plainly when playback is unavailable.
