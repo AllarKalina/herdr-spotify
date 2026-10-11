@@ -13,13 +13,24 @@ It is a local player, not a remote control. It does not show or steer playback o
 ## Install on a Mac
 
 ```sh
-git clone <this repository> herdr-spotify
+herdr plugin install AllarKalina/herdr-spotify --ref main
+herdr plugin list --plugin personal.spotify
+```
+
+Herdr clones the repository and runs the manifest's locked release build for that Mac's architecture. It does not install Rust or other prerequisites. The first build takes about a minute.
+
+To work on the plugin, link a local clone instead:
+
+```sh
+git clone https://github.com/AllarKalina/herdr-spotify.git herdr-spotify
 cd herdr-spotify
 cargo build --release --locked
 herdr plugin link herdr-spotify
 ```
 
-Always build with `--locked`. The lockfile pins a build dependency (`vergen` 9.0.6) that librespot 0.8.0 needs; a fresh resolve does not compile.
+A linked copy must be unlinked before that Mac switches to a managed install.
+
+Always build with `--locked`, as the manifest does. The lockfile pins a build dependency (`vergen` 9.0.6) that librespot 0.8.0 needs; a fresh resolve does not compile.
 
 Each Mac installs and signs in separately. Do not copy Herdr's plugin registry, the compiled binary, or the state directory between computers.
 
@@ -40,8 +51,10 @@ description = "Open Spotify player"
 ### Sign in
 
 ```sh
-target/release/herdr-spotify login
+~/.config/herdr/plugins/github/personal.spotify-*/target/release/herdr-spotify login
 ```
+
+That is the managed install's binary. With a local clone it is `target/release/herdr-spotify login`.
 
 The browser opens twice, once for each sign-in:
 
@@ -143,7 +156,7 @@ Deleting the directory signs this computer out and clears the caches. The tokens
 - **The browsing sign-in fails to start.** Something else is using the port in `redirect_uri`, or the URI is not registered on the developer app.
 - **"Spotify is rate limiting requests".** Wait the stated time. Cached lists still work.
 - **The popup shows stale state after a rebuild.** It should not: a rebuilt binary replaces the running daemon on the next command. `herdr-spotify daemon stop` forces it.
-- **The manifest changed.** Run `herdr plugin link herdr-spotify` again and reopen the popup.
+- **The manifest changed** in a linked clone. Run `herdr plugin link herdr-spotify` again and reopen the popup.
 
 ## Limits
 
@@ -162,4 +175,4 @@ scripts/regress --update-snapshots  # re-record UI snapshots after an intended U
 
 The gate runs formatting, lints, the tests, UI snapshot comparison, a 500-line limit per Rust file, a check that no token reaches a log, the release build and a smoke run. It needs no Spotify account: the Web API is replaced by a stand-in that counts requests, which is how the budget above is tested. Audio output is checked by hand.
 
-`tests/snapshots/ui/` holds a snapshot of every popup state at 100×35, 60×24 and 40×18. `PRODUCT.md` says what the plugin is for and `DESIGN.md` how it looks. `spike/` is the throwaway experiment that proved librespot could do this; nothing depends on it.
+`tests/snapshots/ui/` holds a snapshot of every popup state at 100×35, 60×24 and 40×18. `PRODUCT.md` says what the plugin is for and `DESIGN.md` how it looks.
