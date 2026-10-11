@@ -1,9 +1,9 @@
 
-  Spotify
+  Spotify / Search
 
-  LIBRARY
-  ♥ Liked Songs                                  ▶ playing
+  / █
 
+  Type what you are looking for and press Enter.
 
 
 
@@ -20,13 +20,13 @@
   ▀▀▀▀▀▀▀▀▀▀  ━━━─────────────────────────────────────────
   ▀▀▀▀▀▀▀▀▀▀  0:15 / 3:11         volume 50% · shuffle off
 
-  ↵ play · Space pause · n/p skip · Esc close
+  Enter search · Esc back
 
 
 styles:
- 1   2-8   fg:LightCyan BOLD
- 3   2-57  fg:Gray
- 4   2-57  fg:Black bg:Cyan BOLD
+ 1   2-11  fg:Gray
+ 1  12-17  fg:LightCyan BOLD
+ 5   2-47  fg:Gray
 16   2-2   fg:#000078 bg:#190078
 16   3-3   fg:#001978 bg:#191978
 16   4-4   fg:#003278 bg:#193278

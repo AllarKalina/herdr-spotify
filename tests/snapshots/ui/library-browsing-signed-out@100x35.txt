@@ -1,0 +1,60 @@
+
+  Spotify
+
+  LIBRARY
+  ♥ Liked Songs                                                                                 ▶
+
+  Playlists and search need a second sign-in.
+  In a terminal: herdr-spotify login
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  ░░░░░░░░░░  A Remarkably Long Track Title That Cannot Possibly Fit On One Line (Live, R…  paused
+  ░░░░░░░░░░  Daya · Sit Still, Look Pretty
+  ░░░░░░░░░░
+  ░░░░░░░░░░  ━━━━━━──────────────────────────────────────────────────────────────────────────────
+  ░░░░░░░░░░  0:15 / 3:11                                     volume 50% · shuffle on · repeat one
+
+  Enter play · → open · / search · Space pause · n/p skip · ,/. seek · -/+ volume · Esc close
+
+
+styles:
+ 1   2-8   fg:LightCyan BOLD
+ 3   2-8   fg:Gray
+ 4   2-97  fg:Black bg:Cyan BOLD
+ 6   2-44  fg:Gray
+ 7   2-35  fg:Gray
+27   2-11  fg:DarkGray
+27  14-89  BOLD
+27  92-97  fg:Gray
+28   2-11  fg:DarkGray
+28  14-97  fg:Gray
+29   2-11  fg:DarkGray
+30   2-11  fg:DarkGray
+30  14-19  fg:Cyan
+30  20-97  fg:DarkGray
+31   2-11  fg:DarkGray
+31  14-24  fg:Gray
+31  62-68  fg:Gray
+31  72-74  fg:DarkGray
+31  75-82  fg:Gray
+31  83-84  fg:LightCyan BOLD
+31  85-87  fg:DarkGray
+31  88-94  fg:Gray
+31  95-97  fg:LightCyan BOLD

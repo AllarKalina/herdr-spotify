@@ -13,6 +13,12 @@ pub(super) fn fit(value: &str, width: usize) -> String {
     result
 }
 
+/// Pads a label with spaces to exactly `width` columns.
+pub(super) fn pad(value: &str, width: usize) -> String {
+    let length = value.chars().count();
+    format!("{value}{}", " ".repeat(width.saturating_sub(length)))
+}
+
 pub(super) fn width(value: &str) -> u16 {
     u16::try_from(value.chars().count()).unwrap_or(u16::MAX)
 }

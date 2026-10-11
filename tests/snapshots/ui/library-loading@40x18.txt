@@ -1,0 +1,34 @@
+
+  Spotify
+
+  LIBRARY
+  ♥ Liked Songs                     ▶
+  Loading playlists…
+
+
+
+
+  A Remarkably Long Track Tit…  paused
+  Daya · Sit Still, Look Pretty
+
+  ━━──────────────────────────────────
+  0:15 / 3:11  volume 50% · shuffle on
+
+  ↵ play · → open · / search
+
+
+styles:
+ 1   2-8   fg:LightCyan BOLD
+ 3   2-8   fg:Gray
+ 4   2-37  fg:Black bg:Cyan BOLD
+ 5   2-19  fg:Gray
+10   2-29  BOLD
+10  32-37  fg:Gray
+11   2-37  fg:Gray
+13   2-3   fg:Cyan
+13   4-37  fg:DarkGray
+14   2-12  fg:Gray
+14  15-21  fg:Gray
+14  25-27  fg:DarkGray
+14  28-35  fg:Gray
+14  36-37  fg:LightCyan BOLD

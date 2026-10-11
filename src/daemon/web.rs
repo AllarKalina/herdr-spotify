@@ -23,6 +23,10 @@ pub async fn run(mut end: WebEnd, mut catalog: Catalog) {
                 Ok(tracks) => send(&end, Message::Tracks(tracks)),
                 Err(failure) => notice(&end, &failure),
             },
+            Request::MoreTracks { uri } => match catalog.more_tracks(&uri).await {
+                Ok(tracks) => send(&end, Message::Tracks(tracks)),
+                Err(failure) => notice(&end, &failure),
+            },
             Request::Search { query } => match catalog.search(&query).await {
                 Ok(results) => send(&end, Message::SearchResults(results)),
                 Err(failure) => notice(&end, &failure),

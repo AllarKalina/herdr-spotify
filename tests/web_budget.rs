@@ -2,72 +2,13 @@
 
 mod common;
 
-use common::fake_spotify::{FakeSpotify, Reply, playlist};
+use common::fake_spotify::{Reply, playlist};
+use common::web_setup::Setup;
 use herdr_spotify::config::Config;
-use herdr_spotify::daemon::{self, web};
-use herdr_spotify::paths::Paths;
-use herdr_spotify::protocol::{LIKED, Message, Request};
-use herdr_spotify::web::catalog::{Catalog, LIBRARY_TTL_MS};
+use herdr_spotify::protocol::LIKED;
+use herdr_spotify::web::catalog::Catalog;
 use herdr_spotify::web::{Api, Endpoints, Failure};
 use serde_json::json;
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicU32, Ordering};
-use std::time::Duration;
-
-static NEXT: AtomicU32 = AtomicU32::new(0);
-
-struct Setup {
-    fake: FakeSpotify,
-    paths: Paths,
-}
-
-impl Setup {
-    fn new() -> Self {
-        let name = format!(
-            "hs-web-{}-{}",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::SeqCst)
-        );
-        let dir = PathBuf::from("/tmp").join(name);
-        let _ = std::fs::remove_dir_all(&dir);
-        let paths = Paths::at(dir).expect("paths");
-        paths.prepare().expect("state dir");
-        std::fs::write(paths.web_credentials(), "refresh-1").expect("credentials");
-        Self {
-            fake: FakeSpotify::start(),
-            paths,
-        }
-    }
-
-    /// A catalog as a newly started daemon would build it.
-    fn catalog(&self) -> Catalog {
-        let config = Config {
-            client_id: "test-client".into(),
-            redirect_uri: "http://127.0.0.1:1/callback".into(),
-        };
-        let endpoints = Endpoints {
-            api: format!("{}/v1", self.fake.url),
-            accounts: self.fake.url.clone(),
-        };
-        Catalog::new(Api::new(self.paths.clone(), config, endpoints).expect("api"))
-    }
-
-    /// Rewrites a cached file's fetch time, as if it had been fetched long ago.
-    fn age_cache(&self, name: &str) {
-        let path = self.paths.cache().join(format!("{name}.json"));
-        let mut entry: serde_json::Value =
-            serde_json::from_slice(&std::fs::read(&path).expect("cache file")).expect("json");
-        entry["fetched_at_ms"] = json!(1);
-        entry["value"]["fetched_at_ms"] = json!(1);
-        std::fs::write(path, entry.to_string()).expect("write");
-    }
-}
-
-impl Drop for Setup {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(self.paths.state());
-    }
-}
 
 #[tokio::test]
 async fn the_library_costs_two_calls_and_one_token() {
@@ -307,147 +248,154 @@ async fn without_a_sign_in_or_a_developer_app_nothing_is_sent() {
     assert!(setup.fake.calls().is_empty());
 }
 
-/// Sends requests to the web task the way the socket server does, and collects its answers.
-struct Daemon {
-    hub: daemon::Hub,
-    events: tokio::sync::broadcast::Receiver<Message>,
-}
-
-impl Daemon {
-    fn start(setup: &Setup) -> Self {
-        let (hub, _player, web_end) = daemon::hub();
-        let events = hub.events.subscribe();
-        tokio::spawn(web::run(web_end, setup.catalog()));
-        Self { hub, events }
-    }
-
-    async fn ask(&mut self, request: Request) -> Message {
-        self.hub.web.send(request).await.expect("send");
-        self.next().await.expect("an answer")
-    }
-
-    async fn next(&mut self) -> Option<Message> {
-        tokio::time::timeout(Duration::from_secs(3), self.events.recv())
-            .await
-            .ok()?
-            .ok()
-    }
-
-    async fn is_quiet(&mut self) -> bool {
-        tokio::time::timeout(Duration::from_millis(300), self.events.recv())
-            .await
-            .is_err()
-    }
+fn liked_page(ids: &[&str], total: u32, more: bool) -> Reply {
+    let items: Vec<_> = ids
+        .iter()
+        .map(|id| json!({"track": common::fake_spotify::track(id, &format!("Liked {id}"))}))
+        .collect();
+    let next = if more { json!("more") } else { json!(null) };
+    Reply::json(json!({"items": items, "next": next, "total": total}))
 }
 
 #[tokio::test]
-async fn opening_with_a_warm_cache_asks_spotify_nothing() {
+async fn a_long_list_loads_one_page_at_a_time_and_only_when_asked() {
     let setup = Setup::new();
-    let mut daemon = Daemon::start(&setup);
-    let Message::Library(first) = daemon.ask(Request::GetLibrary { refresh: false }).await else {
-        panic!("expected the library")
-    };
-    let cold = setup.fake.calls().len();
+    setup
+        .fake
+        .once("GET /v1/me/tracks", liked_page(&["a", "b"], 5, true));
+    setup
+        .fake
+        .once("GET /v1/me/tracks", liked_page(&["c", "d"], 5, true));
+    setup
+        .fake
+        .once("GET /v1/me/tracks", liked_page(&["e"], 5, false));
+    let mut catalog = setup.catalog();
 
-    // The popup opens again, and again after the daemon restarted: answered from the cache.
-    let Message::Library(again) = daemon.ask(Request::GetLibrary { refresh: false }).await else {
-        panic!("expected the library")
-    };
-    assert_eq!(again, first);
-    assert!(daemon.is_quiet().await);
-    let mut restarted = Daemon::start(&setup);
+    let first = catalog.tracks(LIKED).await.expect("first page");
     assert_eq!(
-        restarted.ask(Request::GetLibrary { refresh: false }).await,
-        Message::Library(first)
+        (first.tracks.len(), first.total, first.complete),
+        (2, 5, false)
     );
+    catalog.tracks(LIKED).await.expect("opening it again");
     assert_eq!(
-        setup.fake.calls().len(),
-        cold,
-        "calls: {:#?}",
-        setup.fake.calls()
+        setup.fake.count("GET /v1/me/tracks"),
+        1,
+        "opening a list costs one call"
     );
+
+    let second = catalog.more_tracks(LIKED).await.expect("second page");
+    assert_eq!((second.tracks.len(), second.complete), (4, false));
+    let all = catalog.more_tracks(LIKED).await.expect("last page");
+    assert_eq!((all.tracks.len(), all.complete), (5, true));
+    let names: Vec<&str> = all.tracks.iter().map(|track| track.name.as_str()).collect();
+    assert_eq!(
+        names,
+        ["Liked a", "Liked b", "Liked c", "Liked d", "Liked e"]
+    );
+    assert!(
+        setup
+            .fake
+            .calls()
+            .iter()
+            .any(|call| call.contains("/me/tracks?limit=50&offset=50"))
+    );
+    assert!(
+        setup
+            .fake
+            .calls()
+            .iter()
+            .any(|call| call.contains("/me/tracks?limit=50&offset=100"))
+    );
+
+    // Nothing is left to load, and a new daemon has every page on disk.
+    catalog.more_tracks(LIKED).await.expect("nothing more");
+    let reopened = setup.catalog().tracks(LIKED).await.expect("from disk");
+    assert_eq!(reopened, all);
+    assert_eq!(setup.fake.count("GET /v1/me/tracks"), 3);
 }
 
 #[tokio::test]
-async fn a_stale_library_is_shown_at_once_and_then_replaced() {
+async fn stale_liked_songs_are_checked_with_one_call_and_keep_their_loaded_pages() {
     let setup = Setup::new();
-    let mut daemon = Daemon::start(&setup);
-    daemon.ask(Request::GetLibrary { refresh: false }).await;
-    setup.age_cache("library");
+    setup
+        .fake
+        .once("GET /v1/me/tracks", liked_page(&["a", "b"], 3, true));
+    setup
+        .fake
+        .once("GET /v1/me/tracks", liked_page(&["c"], 3, false));
+    let mut catalog = setup.catalog();
+    catalog.tracks(LIKED).await.expect("first page");
+    catalog.more_tracks(LIKED).await.expect("second page");
+
+    // Half an hour later nothing has changed: one call confirms it, and all pages are kept.
+    setup.age_cache("tracks-liked");
+    setup
+        .fake
+        .once("GET /v1/me/tracks", liked_page(&["a", "b"], 3, true));
+    let unchanged = catalog.tracks(LIKED).await.expect("revalidated");
+    assert_eq!((unchanged.tracks.len(), unchanged.complete), (3, true));
+    assert_eq!(setup.fake.count("GET /v1/me/tracks"), 3);
+    catalog.tracks(LIKED).await.expect("fresh again");
+    assert_eq!(setup.fake.count("GET /v1/me/tracks"), 3);
+
+    // A newly liked song changes the first page: the list starts over from it.
+    setup.age_cache("tracks-liked");
+    setup
+        .fake
+        .once("GET /v1/me/tracks", liked_page(&["new", "a"], 4, true));
+    let changed = catalog.tracks(LIKED).await.expect("changed");
+    assert_eq!(
+        (changed.tracks.len(), changed.total, changed.complete),
+        (2, 4, false)
+    );
+    assert_eq!(changed.tracks[0].name, "Liked new");
+}
+
+#[tokio::test]
+async fn a_changed_playlist_starts_over_from_its_first_page() {
+    let setup = Setup::new();
+    let page = |ids: &[&str], more: bool| {
+        let items: Vec<_> = ids
+            .iter()
+            .map(|id| json!({"item": common::fake_spotify::track(id, id)}))
+            .collect();
+        let next = if more { json!("more") } else { json!(null) };
+        Reply::json(json!({"items": items, "next": next, "total": 3}))
+    };
+    setup
+        .fake
+        .once("GET /v1/playlists/p1/items", page(&["a", "b"], true));
+    setup
+        .fake
+        .once("GET /v1/playlists/p1/items", page(&["c"], false));
+    let mut catalog = setup.catalog();
+    catalog.library().await.expect("library");
+    catalog
+        .tracks("spotify:playlist:p1")
+        .await
+        .expect("first page");
+    let all = catalog
+        .more_tracks("spotify:playlist:p1")
+        .await
+        .expect("second page");
+    assert_eq!(all.tracks.len(), 3);
+
     setup.fake.set(
         "GET /v1/me/playlists",
-        Reply::json(json!({"items": [playlist("p3", "New", 1, "s")], "next": null})),
+        Reply::json(json!({"items": [playlist("p1", "Focus", 3, "snap-2")], "next": null})),
     );
-
-    let Message::Library(stale) = daemon.ask(Request::GetLibrary { refresh: false }).await else {
-        panic!("expected the cached library first")
-    };
-    assert_eq!(stale.playlists.len(), 2);
-    assert!(stale.fetched_at_ms < LIBRARY_TTL_MS);
-    let Some(Message::Library(fresh)) = daemon.next().await else {
-        panic!("expected the update")
-    };
-    assert_eq!(fresh.playlists[0].name, "New");
-}
-
-#[tokio::test]
-async fn a_refresh_asks_spotify_even_when_the_cache_is_fresh() {
-    let setup = Setup::new();
-    let mut daemon = Daemon::start(&setup);
-    daemon.ask(Request::GetLibrary { refresh: false }).await;
-    daemon.ask(Request::GetLibrary { refresh: true }).await;
-    assert!(matches!(daemon.next().await, Some(Message::Library(_))));
-    assert_eq!(setup.fake.count("GET /v1/me/playlists"), 2);
-}
-
-#[tokio::test]
-async fn failures_reach_the_popup_as_notices_and_signed_out_as_an_empty_library() {
-    let setup = Setup::new();
-    setup.fake.once(
-        "GET /v1/search",
-        Reply::status(429).header("Retry-After", "45"),
-    );
-    let mut daemon = Daemon::start(&setup);
-    let notice = daemon
-        .ask(Request::Search {
-            query: "found".into(),
-        })
-        .await;
-    let expected = "Spotify is rate limiting requests; trying again in 45s";
+    catalog
+        .library()
+        .await
+        .expect("library with the new snapshot");
+    let fresh = catalog
+        .tracks("spotify:playlist:p1")
+        .await
+        .expect("after the change");
     assert_eq!(
-        notice,
-        Message::Notice {
-            text: expected.into()
-        }
+        fresh.tracks.len(),
+        2,
+        "the standing first page, not the old three"
     );
-
-    let signed_out = Setup::new();
-    std::fs::remove_file(signed_out.paths.web_credentials()).expect("remove");
-    let mut daemon = Daemon::start(&signed_out);
-    let Message::Library(library) = daemon.ask(Request::GetLibrary { refresh: false }).await else {
-        panic!("expected a library")
-    };
-    assert!(!library.signed_in);
-    assert!(library.playlists.is_empty());
-}
-
-#[tokio::test]
-async fn tracks_and_search_answer_with_their_own_messages() {
-    let setup = Setup::new();
-    let mut daemon = Daemon::start(&setup);
-    let Message::Tracks(list) = daemon.ask(Request::GetTracks { uri: LIKED.into() }).await else {
-        panic!("expected tracks")
-    };
-    assert_eq!(
-        list.tracks[0],
-        serde_json::from_value(json!({
-            "uri": "spotify:track:l1", "name": "Liked One", "artists": ["Artist"],
-            "album": "Album", "duration_ms": 180_000
-        }))
-        .expect("track")
-    );
-    assert!(matches!(
-        daemon.ask(Request::Search { query: "found".into() }).await,
-        Message::SearchResults(results) if results.query == "found"
-    ));
+    assert_eq!(setup.fake.count("GET /v1/playlists/p1/items"), 3);
 }

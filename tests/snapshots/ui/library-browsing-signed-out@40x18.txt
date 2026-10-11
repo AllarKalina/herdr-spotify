@@ -2,10 +2,10 @@
   Spotify
 
   LIBRARY
-  ♥ Liked Songs                 paused
+  ♥ Liked Songs                     ▶
 
-
-
+  Playlists and search need a second …
+  In a terminal: herdr-spotify login
 
 
   A Remarkably Long Track Tit…  paused
@@ -14,13 +14,15 @@
   ━━──────────────────────────────────
   0:15 / 3:11  volume 50% · shuffle on
 
-  ↵ play · Space pause · Esc
+  ↵ play · → open · / search
 
 
 styles:
  1   2-8   fg:LightCyan BOLD
- 3   2-37  fg:Gray
+ 3   2-8   fg:Gray
  4   2-37  fg:Black bg:Cyan BOLD
+ 6   2-37  fg:Gray
+ 7   2-35  fg:Gray
 10   2-29  BOLD
 10  32-37  fg:Gray
 11   2-37  fg:Gray

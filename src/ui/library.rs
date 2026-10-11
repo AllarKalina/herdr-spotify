@@ -1,71 +1,75 @@
-//! The list of things to play. For now that is Liked Songs; playlists and search join it
-//! when the daemon can read the library.
+//! The library screen: Liked Songs, then the playlists.
 
-use super::{text, theme};
-use crate::protocol::State;
-use ratatui::Frame;
-use ratatui::layout::Rect;
-use ratatui::style::Style;
-use ratatui::text::{Line, Span};
-use ratatui::widgets::Paragraph;
+use super::list::{Item, Row};
+use crate::protocol::{LIKED, Library, State};
 
-pub struct Row {
-    pub label: &'static str,
-    /// The Spotify context this row plays.
-    pub uri: String,
+/// Something in the library that can be played whole, or opened to see its tracks.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Entry {
+    pub name: String,
+    pub owner: String,
+    pub detail: String,
+    /// The Spotify context that plays it.
+    pub play_uri: String,
+    /// What to ask the daemon for to list its tracks.
+    pub tracks_uri: String,
 }
 
-pub fn rows(state: &State) -> Vec<Row> {
-    state
-        .user
-        .iter()
-        .map(|user| Row {
-            label: "♥ Liked Songs",
-            uri: format!("spotify:user:{user}:collection"),
+/// Liked Songs needs only the audio session; playlists appear once browsing is signed in.
+pub fn entries(state: &State, library: Option<&Library>) -> Vec<Entry> {
+    let mut entries = Vec::new();
+    if let Some(user) = &state.user {
+        let count = library
+            .filter(|library| library.signed_in)
+            .map(|library| library.liked_total);
+        entries.push(Entry {
+            name: "♥ Liked Songs".into(),
+            owner: String::new(),
+            detail: count.map(songs).unwrap_or_default(),
+            play_uri: format!("spotify:user:{user}:collection"),
+            tracks_uri: LIKED.into(),
+        });
+    }
+    for playlist in library.into_iter().flat_map(|library| &library.playlists) {
+        entries.push(Entry {
+            name: playlist.name.clone(),
+            owner: playlist.owner.clone(),
+            detail: songs(playlist.total),
+            play_uri: playlist.uri.clone(),
+            tracks_uri: playlist.uri.clone(),
+        });
+    }
+    entries
+}
+
+pub(super) fn songs(count: u32) -> String {
+    if count == 1 {
+        "1 song".into()
+    } else {
+        format!("{count} songs")
+    }
+}
+
+pub(super) fn rows(state: &State, library: Option<&Library>) -> Vec<Row> {
+    let mut rows = vec![Row::Label("LIBRARY".into())];
+    rows.extend(entries(state, library).into_iter().map(|entry| {
+        Row::Item(Item {
+            current: state.context_uri.as_deref() == Some(entry.play_uri.as_str()),
+            name: entry.name,
+            secondary: entry.owner,
+            detail: entry.detail,
         })
-        .collect()
-}
-
-/// Draws the label and the rows. The row being played says so at the right edge.
-pub(super) fn draw(frame: &mut Frame, area: Rect, state: &State, selected: usize) {
-    if area.height == 0 {
-        return;
-    }
-    let label = Rect::new(area.x, area.y, area.width, 1);
-    frame.render_widget(Paragraph::new("LIBRARY").style(theme::muted()), label);
-
-    let width = usize::from(area.width);
-    for (index, row) in rows(state).iter().enumerate() {
-        let Ok(offset) = u16::try_from(index + 1) else {
-            break;
-        };
-        if offset >= area.height {
-            break;
+    }));
+    match library {
+        None => rows.push(Row::Label("Loading playlists…".into())),
+        Some(library) if !library.signed_in => {
+            rows.push(Row::Blank);
+            rows.push(Row::Label(
+                "Playlists and search need a second sign-in.".into(),
+            ));
+            rows.push(Row::Label("In a terminal: herdr-spotify login".into()));
         }
-        let current = state.context_uri.as_deref() == Some(row.uri.as_str());
-        let mark = match (current, state.playing) {
-            (true, true) => "▶ playing",
-            (true, false) => "paused",
-            (false, _) => "",
-        };
-        let mark_width = mark.chars().count();
-        let name = text::fit(row.label, width.saturating_sub(mark_width + 2));
-        let gap = width.saturating_sub(name.chars().count() + mark_width);
-        let (base, mark_style) = if index == selected {
-            (theme::selection(), theme::selection())
-        } else if current && state.playing {
-            (Style::default(), theme::accent())
-        } else {
-            (Style::default(), theme::muted())
-        };
-        let line = Line::from(vec![
-            Span::styled(name, base),
-            Span::styled(" ".repeat(gap), base),
-            Span::styled(mark, mark_style),
-        ]);
-        frame.render_widget(
-            Paragraph::new(line),
-            Rect::new(area.x, area.y + offset, area.width, 1),
-        );
+        Some(_) => {}
     }
+    rows
 }

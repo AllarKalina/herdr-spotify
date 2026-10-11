@@ -1,11 +1,14 @@
-//! The popup: a list of things to play with the player docked beneath it.
+//! The popup: lists of things to play with the player docked beneath them.
 //!
-//! The popup holds no truth of its own. It draws the state the daemon pushes and turns keys
-//! into requests; it never talks to Spotify.
+//! The popup holds no truth of its own. It draws what the daemon pushes and turns keys into
+//! requests; it never talks to Spotify.
 
+mod browse;
 mod chrome;
 pub mod cover;
-mod library;
+mod keys;
+pub mod library;
+pub mod list;
 mod player;
 mod text;
 mod theme;
@@ -13,13 +16,16 @@ mod theme;
 #[cfg(test)]
 mod tests;
 
+pub use keys::handle_key;
+
 use crate::Result;
 use crate::client::{Connection, Sender};
 use crate::paths::Paths;
-use crate::protocol::{Message, Repeat, Request, State, Status, now_ms};
-use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use crate::protocol::{Library, Message, Request, SearchResults, State, Status, TrackList, now_ms};
+use crossterm::event::{self, Event, KeyEventKind};
 use crossterm::terminal::{EnterAlternateScreen, LeaveAlternateScreen};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
+use list::Cursor;
 use ratatui::backend::CrosstermBackend;
 use ratatui::layout::Rect;
 use ratatui::text::Line;
@@ -29,18 +35,28 @@ use std::io::stdout;
 use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
 
-const SEEK_STEP_MS: u32 = 10_000;
-const VOLUME_STEP: u8 = 5;
 const NOTICE_TIME: Duration = Duration::from_secs(6);
 /// How often the loop looks for daemon messages while no key arrives.
 const TICK: Duration = Duration::from_millis(100);
 
-const HINTS_PLAYER: [&str; 4] = [
-    "Enter play · Space pause · n/p skip · ←/→ seek · -/+ volume · s shuffle · r repeat · Esc close",
-    "Enter play · Space pause · n/p skip · ←/→ seek · -/+ volume · Esc close",
-    "↵ play · Space pause · n/p skip · Esc close",
-    "↵ play · Space pause · Esc",
+const HINTS_LIBRARY: [&str; 4] = [
+    "Enter play · → open · / search · Space pause · n/p skip · ,/. seek · -/+ volume · Esc close",
+    "Enter play · → open · / search · Space pause · n/p skip · Esc close",
+    "↵ play · → open · / search · Esc close",
+    "↵ play · → open · / search",
 ];
+const HINTS_TRACKS: [&str; 4] = [
+    "Enter play · ← back · / search · Space pause · n/p skip · ,/. seek · -/+ volume · Esc back",
+    "Enter play · ← back · / search · Space pause · n/p skip · Esc back",
+    "↵ play · ← back · / search · Esc back",
+    "↵ play · ← back · / search",
+];
+const HINTS_RESULTS: [&str; 3] = [
+    "Enter play · → open playlist · / new search · Space pause · n/p skip · Esc back",
+    "↵ play · → open · / new search · Esc back",
+    "↵ play · → open · Esc back",
+];
+const HINTS_QUERY: [&str; 1] = ["Enter search · Esc back"];
 const HINTS_RETRY: [&str; 1] = ["Enter retry · Esc close"];
 const HINTS_RESTART: [&str; 1] = ["Enter restart · Esc close"];
 const HINTS_WAIT: [&str; 1] = ["Esc close"];
@@ -55,10 +71,48 @@ pub enum Link {
     Down(String),
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum Screen {
+    #[default]
+    Library,
+    Tracks(Open),
+    Search,
+}
+
+/// The list whose tracks are on screen.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Open {
+    pub title: String,
+    /// The Spotify context that plays it.
+    pub play_uri: String,
+    /// What the daemon is asked for to list it.
+    pub tracks_uri: String,
+    /// Where Esc leads: back to search results rather than the library.
+    pub from_search: bool,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct Search {
+    pub query: String,
+    /// True while the query is being typed; then every key types.
+    pub editing: bool,
+    pub waiting: bool,
+    pub results: Option<SearchResults>,
+    pub cursor: Cursor,
+}
+
 pub struct App {
     pub state: State,
     pub link: Link,
-    pub selected: usize,
+    pub screen: Screen,
+    pub library: Option<Library>,
+    pub library_cursor: Cursor,
+    /// The tracks of the open list, once they have arrived.
+    pub tracks: Option<TrackList>,
+    pub tracks_cursor: Cursor,
+    /// True from asking for the next page until it, or a failure, arrives.
+    pub loading_more: bool,
+    pub search: Search,
     notice: Option<(String, Instant)>,
     pub cover: cover::Cache,
 }
@@ -78,7 +132,13 @@ impl Default for App {
         Self {
             state: State::default(),
             link: Link::Starting,
-            selected: 0,
+            screen: Screen::Library,
+            library: None,
+            library_cursor: Cursor::default(),
+            tracks: None,
+            tracks_cursor: Cursor::default(),
+            loading_more: false,
+            search: Search::default(),
             notice: None,
             cover: cover::Cache::default(),
         }
@@ -90,115 +150,66 @@ impl App {
         self.notice = Some((text, Instant::now()));
     }
 
-    fn apply(&mut self, message: Message) {
+    pub fn apply(&mut self, message: Message) {
         match message {
-            Message::State(state) => {
-                self.state = state;
-                self.selected = self
-                    .selected
-                    .min(library::rows(&self.state).len().saturating_sub(1));
+            Message::State(state) => self.state = state,
+            Message::Library(library) => self.library = Some(library),
+            Message::Tracks(list) => {
+                // An answer for a list that is no longer open is dropped.
+                if matches!(&self.screen, Screen::Tracks(open) if open.tracks_uri == list.uri) {
+                    self.tracks_cursor.clamp(list.tracks.len());
+                    self.tracks = Some(list);
+                    self.loading_more = false;
+                }
             }
-            Message::Notice { text } => self.notify(text),
-            // The library screens arrive with the next step; until then these are ignored.
-            Message::Hello { .. }
-            | Message::Library(_)
-            | Message::Tracks(_)
-            | Message::SearchResults(_) => {}
+            Message::SearchResults(results) => {
+                if results.query == self.search.query.trim() {
+                    self.search.results = Some(results);
+                    self.search.waiting = false;
+                    self.search.cursor = Cursor::default();
+                }
+            }
+            Message::Notice { text } => {
+                // A notice is how a failed request answers; stop waiting for it.
+                self.loading_more = false;
+                self.search.waiting = false;
+                self.notify(text);
+            }
+            Message::Hello { .. } => {}
         }
+        let entries = library::entries(&self.state, self.library.as_ref()).len();
+        self.library_cursor.clamp(entries);
     }
 
-    /// True when the list and the player can be used.
+    /// True when the lists and the player can be used.
     fn ready(&self) -> bool {
         self.link == Link::Up && self.state.status == Status::Ready
     }
-}
 
-pub fn handle_key(app: &mut App, key: KeyEvent, now_ms: u64) -> Action {
-    let control = key.modifiers.contains(KeyModifiers::CONTROL);
-    match key.code {
-        KeyCode::Esc | KeyCode::Char('q') => return Action::Quit,
-        KeyCode::Char('c') if control => return Action::Quit,
-        _ => {}
+    /// Opens a list's tracks and returns the request that fetches them.
+    fn open(&mut self, entry: &library::Entry, from_search: bool) -> Action {
+        self.screen = Screen::Tracks(Open {
+            title: entry.name.trim_start_matches("♥ ").to_owned(),
+            play_uri: entry.play_uri.clone(),
+            tracks_uri: entry.tracks_uri.clone(),
+            from_search,
+        });
+        self.tracks = None;
+        self.tracks_cursor = Cursor::default();
+        self.loading_more = false;
+        Action::Send(Request::GetTracks {
+            uri: entry.tracks_uri.clone(),
+        })
     }
-    if app.link != Link::Up {
-        let retry = key.code == KeyCode::Enter && app.link != Link::Starting;
-        return if retry {
-            Action::Reconnect
-        } else {
-            Action::None
-        };
-    }
-    if app.state.status != Status::Ready {
-        let waiting = app.state.status == Status::Connecting;
-        let retry = key.code == KeyCode::Enter && !waiting;
-        return if retry {
-            Action::Send(Request::Retry)
-        } else {
-            Action::None
-        };
-    }
-
-    let rows = library::rows(&app.state);
-    let play_selected = |app: &App| match rows.get(app.selected) {
-        Some(row) => Action::Send(Request::PlayContext {
-            uri: row.uri.clone(),
-            index: None,
-        }),
-        None => Action::None,
-    };
-    let state = &app.state;
-    match key.code {
-        KeyCode::Down | KeyCode::Char('j') => {
-            app.selected = (app.selected + 1).min(rows.len().saturating_sub(1));
-            Action::None
-        }
-        KeyCode::Up | KeyCode::Char('k') => {
-            app.selected = app.selected.saturating_sub(1);
-            Action::None
-        }
-        KeyCode::Enter => play_selected(app),
-        // With nothing loaded there is nothing to resume, so Space starts the selection.
-        KeyCode::Char(' ') if state.track.is_none() => play_selected(app),
-        KeyCode::Char(' ') => Action::Send(Request::Toggle),
-        KeyCode::Char('n') => Action::Send(Request::Next),
-        KeyCode::Char('p') => Action::Send(Request::Previous),
-        KeyCode::Right | KeyCode::Char('l') => seek(state, now_ms, true),
-        KeyCode::Left | KeyCode::Char('h') => seek(state, now_ms, false),
-        KeyCode::Char('+' | '=') => Action::Send(Request::Volume {
-            percent: state.volume.saturating_add(VOLUME_STEP).min(100),
-        }),
-        KeyCode::Char('-') => Action::Send(Request::Volume {
-            percent: state.volume.saturating_sub(VOLUME_STEP),
-        }),
-        KeyCode::Char('s') => Action::Send(Request::Shuffle { on: !state.shuffle }),
-        KeyCode::Char('r') => Action::Send(Request::Repeat {
-            mode: match state.repeat {
-                Repeat::Off => Repeat::Context,
-                Repeat::Context => Repeat::Track,
-                Repeat::Track => Repeat::Off,
-            },
-        }),
-        _ => Action::None,
-    }
-}
-
-fn seek(state: &State, now_ms: u64, forward: bool) -> Action {
-    let Some(track) = &state.track else {
-        return Action::None;
-    };
-    let position = state.position_at(now_ms);
-    let target = if forward {
-        position.saturating_add(SEEK_STEP_MS).min(track.duration_ms)
-    } else {
-        position.saturating_sub(SEEK_STEP_MS)
-    };
-    Action::Send(Request::Seek {
-        position_ms: target,
-    })
 }
 
 pub fn draw(frame: &mut Frame, app: &mut App, now_ms: u64) {
-    chrome::draw_header(frame, None);
+    let crumb = match &app.screen {
+        Screen::Library => None,
+        Screen::Tracks(open) => Some(open.title.clone()),
+        Screen::Search => Some("Search".to_owned()),
+    };
+    chrome::draw_header(frame, crumb.as_deref().filter(|_| app.ready()));
     let content = chrome::content(frame.area());
     // The last row is the shortcut line; the one above it is kept for notices.
     let body = Rect::new(
@@ -221,13 +232,46 @@ pub fn draw(frame: &mut Frame, app: &mut App, now_ms: u64) {
             body.width,
             strip_height,
         );
-        let list = Rect::new(
+        let mut area = Rect::new(
             body.x,
             body.y,
             body.width,
             body.height.saturating_sub(strip_height + 1),
         );
-        library::draw(frame, list, &app.state, app.selected);
+        let playing = app.state.playing;
+        let hints: &[&str] = match &app.screen {
+            Screen::Library => {
+                let rows = library::rows(&app.state, app.library.as_ref());
+                list::draw(frame, area, &rows, &mut app.library_cursor, playing);
+                &HINTS_LIBRARY
+            }
+            Screen::Tracks(open) => {
+                let rows =
+                    browse::track_rows(open, app.tracks.as_ref(), app.loading_more, &app.state);
+                list::draw(frame, area, &rows, &mut app.tracks_cursor, playing);
+                &HINTS_TRACKS
+            }
+            Screen::Search => {
+                let query = text::fit(&browse::query_line(&app.search), usize::from(area.width));
+                frame.render_widget(
+                    Paragraph::new(query),
+                    Rect::new(area.x, area.y, area.width, 1.min(area.height)),
+                );
+                area = Rect::new(
+                    area.x,
+                    area.y + 2.min(area.height),
+                    area.width,
+                    area.height.saturating_sub(2),
+                );
+                let rows = browse::search_rows(&app.search, &app.state);
+                list::draw(frame, area, &rows, &mut app.search.cursor, playing);
+                if app.search.editing {
+                    &HINTS_QUERY
+                } else {
+                    &HINTS_RESULTS
+                }
+            }
+        };
         let cover_path = app
             .state
             .track
@@ -235,7 +279,7 @@ pub fn draw(frame: &mut Frame, app: &mut App, now_ms: u64) {
             .and_then(|track| track.cover_path.as_deref());
         let art = app.cover.get(cover_path).cloned();
         player::draw(frame, strip, &app.state, art.as_ref(), now_ms);
-        chrome::draw_footer(frame, &HINTS_PLAYER);
+        chrome::draw_footer(frame, hints);
     } else {
         let (lines, hints): (Vec<Line>, &[&str]) = match (&app.link, app.state.status) {
             (Link::Starting, _) => (
@@ -348,7 +392,14 @@ fn run_loop(
     loop {
         while let Ok(event) = incoming.try_recv() {
             match event {
-                Incoming::Connected(connected) => {
+                Incoming::Connected(mut connected) => {
+                    // The daemon answers from its cache unless that is stale.
+                    let _ = connected.send(&Request::GetLibrary { refresh: false });
+                    if let Screen::Tracks(open) = &app.screen {
+                        let _ = connected.send(&Request::GetTracks {
+                            uri: open.tracks_uri.clone(),
+                        });
+                    }
                     sender = Some(connected);
                     app.link = Link::Up;
                 }
@@ -385,6 +436,8 @@ fn run_loop(
                     .as_mut()
                     .is_some_and(|sender| sender.send(&request).is_ok());
                 if !sent {
+                    app.loading_more = false;
+                    app.search.waiting = false;
                     app.notify("The player did not take that. Try again.".into());
                 }
             }

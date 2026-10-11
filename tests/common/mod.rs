@@ -3,6 +3,7 @@
 #![allow(dead_code)]
 
 pub mod fake_spotify;
+pub mod web_setup;
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};

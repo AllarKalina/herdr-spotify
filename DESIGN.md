@@ -42,16 +42,33 @@ This plugin inherits the Personal Inbox's world (`https://github.com/AllarKalina
 
 ## Layout
 
-- Header at column two, row one: `Spotify` in bold teal. A second segment will name the open playlist or search once those screens exist; then only the last segment is teal.
-- One blank row, then `LIBRARY` in Subtext Zero and its rows from the content inset.
+- Header at column two, row one: `Spotify` in bold teal. Inside a list or search a second segment names it, `Spotify / Focus` or `Spotify / Search`; then only the last segment is teal.
+- One blank row, then the screen's list from the content inset.
 - The player strip is docked at the bottom of the content area. One row below it is kept for notices, and the last row is the shortcut line.
 - The strip is five rows when the popup is at least 15 content rows tall, three otherwise. The cover appears beside it from 56 content columns.
 
+## Screens
+
+Three screens share one list component and one set of transport keys.
+
+- **Library.** `LIBRARY`, then Liked Songs and the playlists. Enter plays a row; Right opens its tracks.
+- **Tracks.** A count line, `110 songs` or `110 songs · 50 loaded`, then the tracks. Enter plays that track inside its playlist. Left or Esc goes back. The next 50 are asked for when the selection comes within ten rows of the end; `Loading more…` then shows under the last row.
+- **Search.** The query on the first row as `/ words`, with a block cursor while typing. Nothing is sent until Enter. Results are `SONGS` then `PLAYLISTS`. Esc goes back to the library.
+
+Esc always goes back one level and closes the popup only from the library. `q` closes from anywhere except while typing a query.
+
 ## Components
 
-### Library row
+### List
 
-Same selection as the Inbox list: teal fill, Surface One text, bold, across the content width. The row whose context is loaded says `▶ playing` or `paused` at the right edge, teal when playing and unselected.
+One component draws every list.
+
+- A row is a name, an optional second column (artists, or a playlist's owner) from 64 columns, and a right-aligned detail (duration, or number of songs) in Subtext Zero.
+- Every row reserves the same right-hand width, so columns line up whether or not a row carries the mark.
+- `▶` before the detail marks what is loaded in the player: teal while playing, Subtext Zero while paused.
+- Selection is the Inbox's: teal fill, Surface One text, bold, across the content width.
+- Labels (`LIBRARY`, `SONGS`, a count, a remark) are Subtext Zero and never selected. A label directly above or below the selected row scrolls into view with it.
+- Long names end in an ellipsis; rows never wrap.
 
 ### Player strip
 
@@ -75,7 +92,7 @@ One row above the shortcut line, in Red, for six seconds. Nothing moves to make 
 
 ### Shortcut line
 
-Unstyled, one line, the longest version that fits: from `Enter play · Space pause · n/p skip · ←/→ seek · -/+ volume · s shuffle · r repeat · Esc close` down to `↵ play · Space pause · Esc`.
+Unstyled, one line, the longest version that fits. It names what Enter and the arrows do on the current screen first, then search, then transport: `Enter play · → open · / search · Space pause · n/p skip · ,/. seek · -/+ volume · Esc close` down to `↵ play · → open · / search`. `s` shuffle, `r` repeat and `R` refresh work everywhere but are not listed.
 
 ## Do's and Don'ts
 

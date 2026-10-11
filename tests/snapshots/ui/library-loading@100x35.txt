@@ -2,8 +2,8 @@
   Spotify
 
   LIBRARY
-  ♥ Liked Songs                                                                             paused
-
+  ♥ Liked Songs                                                                                 ▶
+  Loading playlists…
 
 
 
@@ -31,13 +31,14 @@
   ░░░░░░░░░░  ━━━━━━──────────────────────────────────────────────────────────────────────────────
   ░░░░░░░░░░  0:15 / 3:11                                     volume 50% · shuffle on · repeat one
 
-  Enter play · Space pause · n/p skip · ←/→ seek · -/+ volume · s shuffle · r repeat · Esc close
+  Enter play · → open · / search · Space pause · n/p skip · ,/. seek · -/+ volume · Esc close
 
 
 styles:
  1   2-8   fg:LightCyan BOLD
- 3   2-97  fg:Gray
+ 3   2-8   fg:Gray
  4   2-97  fg:Black bg:Cyan BOLD
+ 5   2-19  fg:Gray
 27   2-11  fg:DarkGray
 27  14-89  BOLD
 27  92-97  fg:Gray

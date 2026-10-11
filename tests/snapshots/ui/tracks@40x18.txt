@@ -1,0 +1,39 @@
+
+  Spotify / Focus
+
+  110 songs · 50 loaded
+  Song 1                          3:01
+  Song 2                          3:02
+  Song 3                          3:03
+  Song 4                        ▶ 3:04
+  Song 5                          3:05
+
+  Hide Away                  ▶ playing
+  Daya · Sit Still, Look Pretty
+
+  ━━──────────────────────────────────
+  0:15 / 3:11               volume 50%
+
+  ↵ play · ← back · / search
+
+
+styles:
+ 1   2-11  fg:Gray
+ 1  12-16  fg:LightCyan BOLD
+ 3   2-22  fg:Gray
+ 4  32-33  fg:LightCyan BOLD
+ 4  34-37  fg:Gray
+ 5   2-37  fg:Black bg:Cyan BOLD
+ 6  32-33  fg:LightCyan BOLD
+ 6  34-37  fg:Gray
+ 7  32-33  fg:LightCyan BOLD
+ 7  34-37  fg:Gray
+ 8  32-33  fg:LightCyan BOLD
+ 8  34-37  fg:Gray
+10   2-10  BOLD
+10  29-37  fg:LightCyan BOLD
+11   2-37  fg:Gray
+13   2-3   fg:Cyan
+13   4-37  fg:DarkGray
+14   2-12  fg:Gray
+14  28-34  fg:Gray

@@ -2,10 +2,10 @@
   Spotify
 
   LIBRARY
-  ♥ Liked Songs
-
-
-
+  ♥ Liked Songs                                 1085 songs
+  Focus                                          110 songs
+  A Playlist With A Name Much Longer Than A…        1 song
+  Running                                         56 songs
 
 
 
@@ -20,12 +20,15 @@
   Press Enter to play the selection.
 
 
-  ↵ play · Space pause · n/p skip · Esc close
+  ↵ play · → open · / search · Esc close
 
 
 styles:
  1   2-8   fg:LightCyan BOLD
- 3   2-57  fg:Gray
+ 3   2-8   fg:Gray
  4   2-57  fg:Black bg:Cyan BOLD
+ 5  46-57  fg:Gray
+ 6  46-57  fg:Gray
+ 7  46-57  fg:Gray
 18   2-16  fg:Gray
 19   2-35  fg:DarkGray

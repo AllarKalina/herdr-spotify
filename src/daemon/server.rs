@@ -91,7 +91,10 @@ async fn client(stream: UnixStream, hub: Hub, shutdown: &Notify) -> Result<()> {
                     Ok(request) => {
                         let browsing = matches!(
                             request,
-                            Request::GetLibrary { .. } | Request::GetTracks { .. } | Request::Search { .. }
+                            Request::GetLibrary { .. }
+                                | Request::GetTracks { .. }
+                                | Request::MoreTracks { .. }
+                                | Request::Search { .. }
                         );
                         let target = if browsing { &hub.web } else { &hub.requests };
                         if target.send(request).await.is_err() {

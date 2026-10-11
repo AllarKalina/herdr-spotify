@@ -3,8 +3,12 @@
 //! Snapshots live in `tests/snapshots/ui/`. Record intended changes with
 //! `scripts/regress --update-snapshots` and review them through `git diff`.
 
+mod keys;
+
 use super::*;
-use crate::protocol::Track;
+use crate::protocol::{Library, Playlist, Repeat, SearchResults, Track, TrackList};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use library::Entry;
 use ratatui::backend::TestBackend;
 use ratatui::buffer::Buffer;
 use ratatui::style::{Color, Modifier};
@@ -118,13 +122,92 @@ fn check(name: &str, app: &mut App) {
     );
 }
 
-#[test]
-fn snapshot_playing_with_cover() {
-    check("playing", &mut playing());
+fn playlist(id: &str, name: &str, total: u32) -> Playlist {
+    Playlist {
+        uri: format!("spotify:playlist:{id}"),
+        name: name.into(),
+        owner: "Allar Kalina".into(),
+        total,
+        snapshot_id: "s".into(),
+    }
+}
+
+fn song(id: u32, name: &str, artist: &str) -> Track {
+    Track {
+        uri: format!("spotify:track:{id}"),
+        name: name.into(),
+        artists: vec![artist.into()],
+        album: "Album".into(),
+        duration_ms: 180_000 + id * 1000,
+        cover_path: None,
+    }
+}
+
+/// Playing, with a library of three playlists.
+fn browsing() -> App {
+    let mut app = playing();
+    app.library = Some(Library {
+        signed_in: true,
+        playlists: vec![
+            playlist("p1", "Focus", 110),
+            playlist(
+                "p2",
+                "A Playlist With A Name Much Longer Than Any Popup Is Wide, Probably",
+                1,
+            ),
+            playlist("p3", "Running", 56),
+        ],
+        liked_total: 1085,
+        fetched_at_ms: NOW,
+    });
+    app
+}
+
+fn focus() -> Entry {
+    Entry {
+        name: "Focus".into(),
+        owner: "Allar Kalina".into(),
+        detail: String::new(),
+        play_uri: "spotify:playlist:p1".into(),
+        tracks_uri: "spotify:playlist:p1".into(),
+    }
+}
+
+/// The Focus playlist open with `count` of 110 tracks loaded.
+fn in_playlist(count: u32) -> App {
+    let mut app = browsing();
+    app.open(&focus(), false);
+    let tracks = (1..=count)
+        .map(|id| song(id, &format!("Song {id}"), "Some Artist"))
+        .collect();
+    app.apply(Message::Tracks(TrackList {
+        uri: "spotify:playlist:p1".into(),
+        tracks,
+        total: 110,
+        complete: count >= 110,
+    }));
+    app
+}
+
+fn searched() -> App {
+    let mut app = browsing();
+    app.screen = Screen::Search;
+    app.search.query = "daft".into();
+    app.apply(Message::SearchResults(SearchResults {
+        query: "daft".into(),
+        tracks: vec![
+            song(1, "Hide Away", "Daya"),
+            song(7, "One More Time", "Daft Punk"),
+        ],
+        playlists: vec![playlist("p9", "Daft Punk Radio", 50)],
+    }));
+    app
 }
 
 #[test]
-fn snapshot_paused_before_the_cover_arrives() {
+fn snapshot_library() {
+    check("library", &mut browsing());
+
     let mut app = playing();
     app.state.playing = false;
     app.state.shuffle = true;
@@ -134,12 +217,56 @@ fn snapshot_paused_before_the_cover_arrives() {
     track.name =
         "A Remarkably Long Track Title That Cannot Possibly Fit On One Line (Live, Remastered)"
             .into();
-    check("paused", &mut app);
+    check("library-loading", &mut app);
+
+    app.library = Some(Library::default());
+    check("library-browsing-signed-out", &mut app);
 }
 
 #[test]
 fn snapshot_nothing_playing() {
-    check("nothing-playing", &mut ready());
+    let mut app = ready();
+    app.library = browsing().library;
+    check("nothing-playing", &mut app);
+}
+
+#[test]
+fn snapshot_tracks() {
+    let mut app = in_playlist(50);
+    app.tracks_cursor.move_by(1, 50);
+    app.state.track.as_mut().expect("track").uri = "spotify:track:4".into();
+    check("tracks", &mut app);
+
+    app.loading_more = true;
+    app.tracks_cursor.move_by(48, 50);
+    check("tracks-loading-more", &mut app);
+
+    let mut waiting = browsing();
+    waiting.open(&focus(), false);
+    check("tracks-loading", &mut waiting);
+}
+
+#[test]
+fn snapshot_search() {
+    let mut app = browsing();
+    app.screen = Screen::Search;
+    app.search.editing = true;
+    check("search-empty-query", &mut app);
+    app.search.query = "daft".into();
+    check("search-typing", &mut app);
+    app.search.editing = false;
+    app.search.waiting = true;
+    check("search-waiting", &mut app);
+
+    let mut found = searched();
+    found.search.cursor.move_by(2, 3);
+    check("search-results", &mut found);
+
+    found.apply(Message::SearchResults(SearchResults {
+        query: "daft".into(),
+        ..SearchResults::default()
+    }));
+    check("search-nothing-found", &mut found);
 }
 
 #[test]
@@ -166,20 +293,26 @@ fn snapshot_states_without_a_player() {
 
 #[test]
 fn snapshot_notice_above_the_shortcuts() {
-    let mut app = playing();
-    app.notify("Track unavailable: spotify:track:2".into());
+    let mut app = browsing();
+    app.notify("Spotify is rate limiting requests; trying again in 45s".into());
     check("notice", &mut app);
 }
 
 #[test]
-fn every_state_draws_at_any_size_without_panicking() {
-    let mut apps = vec![playing(), ready(), App::default()];
+fn every_screen_draws_at_any_size_without_panicking() {
+    let mut apps = vec![
+        browsing(),
+        in_playlist(50),
+        searched(),
+        ready(),
+        App::default(),
+    ];
     apps.push(App {
         link: Link::Down("gone".into()),
         ..App::default()
     });
     for app in &mut apps {
-        for width in [0, 1, 4, 11, 20, 56, 57, 200] {
+        for width in [0, 1, 4, 11, 20, 56, 57, 64, 200] {
             for height in [0, 1, 3, 5, 9, 14, 60] {
                 render(app, (width, height));
             }
@@ -187,145 +320,19 @@ fn every_state_draws_at_any_size_without_panicking() {
     }
 }
 
-fn press(app: &mut App, code: KeyCode) -> Action {
-    handle_key(app, KeyEvent::new(code, KeyModifiers::NONE), NOW)
-}
-
-fn send(request: Request) -> Action {
-    Action::Send(request)
-}
-
 #[test]
-fn enter_plays_the_selected_row_and_space_toggles() {
-    let mut app = playing();
-    let liked = Request::PlayContext {
-        uri: "spotify:user:allar:collection".into(),
-        index: None,
-    };
-    assert_eq!(press(&mut app, KeyCode::Enter), send(liked.clone()));
-    assert_eq!(press(&mut app, KeyCode::Char(' ')), send(Request::Toggle));
-
-    // With nothing loaded, Space has nothing to resume and starts the selection instead.
-    let mut idle = ready();
-    assert_eq!(press(&mut idle, KeyCode::Char(' ')), send(liked));
-}
-
-#[test]
-fn transport_keys_send_one_request_each() {
-    let mut app = playing();
-    assert_eq!(press(&mut app, KeyCode::Char('n')), send(Request::Next));
-    assert_eq!(press(&mut app, KeyCode::Char('p')), send(Request::Previous));
-    assert_eq!(
-        press(&mut app, KeyCode::Right),
-        send(Request::Seek {
-            position_ms: 25_000
-        })
-    );
-    assert_eq!(
-        press(&mut app, KeyCode::Left),
-        send(Request::Seek { position_ms: 5_000 })
-    );
-    assert_eq!(
-        press(&mut app, KeyCode::Char('+')),
-        send(Request::Volume { percent: 55 })
-    );
-    assert_eq!(
-        press(&mut app, KeyCode::Char('-')),
-        send(Request::Volume { percent: 45 })
-    );
-    assert_eq!(
-        press(&mut app, KeyCode::Char('s')),
-        send(Request::Shuffle { on: true })
-    );
-    assert_eq!(
-        press(&mut app, KeyCode::Char('r')),
-        send(Request::Repeat {
-            mode: Repeat::Context
-        })
-    );
-}
-
-#[test]
-fn seeking_and_volume_stop_at_their_limits() {
-    let mut app = playing();
-    app.state.position_ms = 188_000;
-    assert_eq!(
-        press(&mut app, KeyCode::Right),
-        send(Request::Seek {
-            position_ms: 191_000
-        })
-    );
-    app.state.position_ms = 3_000;
-    assert_eq!(
-        press(&mut app, KeyCode::Left),
-        send(Request::Seek { position_ms: 0 })
-    );
-    app.state.volume = 98;
-    assert_eq!(
-        press(&mut app, KeyCode::Char('=')),
-        send(Request::Volume { percent: 100 })
-    );
-    app.state.volume = 2;
-    assert_eq!(
-        press(&mut app, KeyCode::Char('-')),
-        send(Request::Volume { percent: 0 })
-    );
-}
-
-#[test]
-fn seeking_follows_the_position_as_it_plays() {
-    let mut app = playing();
-    let right = KeyEvent::new(KeyCode::Right, KeyModifiers::NONE);
-    let action = handle_key(&mut app, right, NOW + 20_000);
-    assert_eq!(
-        action,
-        send(Request::Seek {
-            position_ms: 45_000
-        })
-    );
-}
-
-#[test]
-fn without_a_player_only_enter_and_close_do_anything() {
-    let mut app = App {
-        link: Link::Up,
-        ..App::default()
-    };
-    app.state.status = Status::SignedOut;
-    assert_eq!(press(&mut app, KeyCode::Char(' ')), Action::None);
-    assert_eq!(press(&mut app, KeyCode::Char('n')), Action::None);
-    assert_eq!(press(&mut app, KeyCode::Enter), send(Request::Retry));
-    app.state.status = Status::Connecting;
-    assert_eq!(press(&mut app, KeyCode::Enter), Action::None);
-
-    let mut down = App {
-        link: Link::Down("gone".into()),
-        ..App::default()
-    };
-    assert_eq!(press(&mut down, KeyCode::Enter), Action::Reconnect);
-    let mut starting = App::default();
-    assert_eq!(press(&mut starting, KeyCode::Enter), Action::None);
-
-    for app in [&mut app, &mut down, &mut starting] {
-        assert_eq!(press(app, KeyCode::Esc), Action::Quit);
-        assert_eq!(press(app, KeyCode::Char('q')), Action::Quit);
-        let control_c = KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL);
-        assert_eq!(handle_key(app, control_c, NOW), Action::Quit);
-    }
-}
-
-#[test]
-fn a_pushed_state_replaces_what_is_shown_and_a_notice_is_kept() {
-    let mut app = ready();
-    let mut next = playing().state;
-    next.volume = 80;
-    app.apply(Message::State(next.clone()));
-    assert_eq!(app.state, next);
-    app.apply(Message::Notice {
-        text: "Track unavailable".into(),
-    });
-    assert_eq!(
-        app.notice.as_ref().map(|(text, _)| text.as_str()),
-        Some("Track unavailable")
+fn the_selection_stays_in_view_while_scrolling_down_and_back_up() {
+    let mut app = in_playlist(50);
+    let size = (60, 24);
+    let visible = |app: &mut App, name: &str| describe(&render(app, size)).contains(name);
+    assert!(visible(&mut app, "Song 1 "));
+    app.tracks_cursor.move_by(40, 50);
+    assert!(visible(&mut app, "Song 41 "));
+    assert!(!visible(&mut app, "Song 1 "));
+    app.tracks_cursor.move_by(-40, 50);
+    assert!(visible(&mut app, "Song 1 "));
+    assert!(
+        visible(&mut app, "110 songs"),
+        "the label returns with the first row"
     );
 }

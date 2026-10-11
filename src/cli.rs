@@ -17,9 +17,11 @@ Usage: herdr-spotify <command>
   ctl <action>                Control playback:
         play | pause | toggle | next | previous
         seek <seconds> | volume <0-100> | shuffle <on|off> | repeat <off|context|track>
-        play-context <spotify-uri> [track-index]
+        play-context <spotify-uri> [track-index | track-uri]
+        play-tracks <index> <track-uri>...
   library [--refresh]         List your playlists
-  tracks <playlist-uri|liked> List the tracks of a playlist or of Liked Songs
+  tracks <playlist-uri|liked> [--more]
+                              List the tracks loaded so far, or load 50 more
   search <words>              Search tracks and playlists
   daemon                      Run the player in the foreground
   daemon stop                 Stop the background player";
@@ -53,6 +55,9 @@ pub fn run(args: Vec<String>) -> Result<()> {
         ["library"] => browse(Request::GetLibrary { refresh: false }),
         ["library", "--refresh"] => browse(Request::GetLibrary { refresh: true }),
         ["tracks", uri] => browse(Request::GetTracks {
+            uri: (*uri).to_owned(),
+        }),
+        ["tracks", uri, "--more"] => browse(Request::MoreTracks {
             uri: (*uri).to_owned(),
         }),
         ["search", words @ ..] if !words.is_empty() => browse(Request::Search {
@@ -102,7 +107,7 @@ fn ctl(request: &Request) -> Result<()> {
     let mut connection = Connection::open(&Paths::from_env()?)?;
     // Loading a context reports the context first and the track a moment later.
     let quiet = match request {
-        Request::PlayContext { .. } => LOAD_WAIT,
+        Request::PlayContext { .. } | Request::PlayTracks { .. } => LOAD_WAIT,
         _ => SETTLE_WAIT,
     };
     let state = settled(&mut connection, Some(request), quiet)?;
@@ -154,6 +159,7 @@ const BROWSE_WAIT: Duration = Duration::from_secs(30);
 fn browse(request: Request) -> Result<()> {
     let request = match request {
         Request::GetTracks { uri } if uri == "liked" => Request::GetTracks { uri: LIKED.into() },
+        Request::MoreTracks { uri } if uri == "liked" => Request::MoreTracks { uri: LIKED.into() },
         other => other,
     };
     let mut connection = Connection::open(&Paths::from_env()?)?;
@@ -183,7 +189,7 @@ fn browse(request: Request) -> Result<()> {
                 }));
                 lines
             }
-            (Request::GetTracks { .. }, Message::Tracks(list)) => {
+            (Request::GetTracks { .. } | Request::MoreTracks { .. }, Message::Tracks(list)) => {
                 let mut lines: Vec<String> = list.tracks.iter().map(track_line).collect();
                 if usize::try_from(list.total).unwrap_or(usize::MAX) > list.tracks.len() {
                     lines.push(format!("… {} of {} shown", list.tracks.len(), list.total));
@@ -260,10 +266,23 @@ fn parse_action(action: &[&str]) -> Result<Request> {
         ["play-context", uri] => Request::PlayContext {
             uri: (*uri).to_owned(),
             index: None,
+            track_uri: None,
+        },
+        ["play-context", uri, track] if track.starts_with("spotify:track:") => {
+            Request::PlayContext {
+                uri: (*uri).to_owned(),
+                index: None,
+                track_uri: Some((*track).to_owned()),
+            }
+        }
+        ["play-tracks", index, uris @ ..] if !uris.is_empty() => Request::PlayTracks {
+            uris: uris.iter().map(|uri| (*uri).to_owned()).collect(),
+            index: number(index)?,
         },
         ["play-context", uri, index] => Request::PlayContext {
             uri: (*uri).to_owned(),
             index: Some(number(index)?),
+            track_uri: None,
         },
         _ => return Err(format!("Unknown action: {}\n\n{USAGE}", action.join(" ")).into()),
     })
@@ -322,7 +341,8 @@ mod tests {
             parse_action(&["play-context", "spotify:playlist:x", "4"])?,
             Request::PlayContext {
                 uri: "spotify:playlist:x".into(),
-                index: Some(4)
+                index: Some(4),
+                track_uri: None
             }
         );
         assert!(parse_action(&["volume", "101"]).is_err());

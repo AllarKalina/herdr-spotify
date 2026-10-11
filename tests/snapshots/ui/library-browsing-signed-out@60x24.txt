@@ -1,0 +1,46 @@
+
+  Spotify
+
+  LIBRARY
+  ♥ Liked Songs                                         ▶
+
+  Playlists and search need a second sign-in.
+  In a terminal: herdr-spotify login
+
+
+
+
+
+
+
+
+  ░░░░░░░░░░  A Remarkably Long Track Title That …  paused
+  ░░░░░░░░░░  Daya · Sit Still, Look Pretty
+  ░░░░░░░░░░
+  ░░░░░░░░░░  ━━━─────────────────────────────────────────
+  ░░░░░░░░░░  0:15 / 3:11          volume 50% · shuffle on
+
+  ↵ play · → open · / search · Esc close
+
+
+styles:
+ 1   2-8   fg:LightCyan BOLD
+ 3   2-8   fg:Gray
+ 4   2-57  fg:Black bg:Cyan BOLD
+ 6   2-44  fg:Gray
+ 7   2-35  fg:Gray
+16   2-11  fg:DarkGray
+16  14-49  BOLD
+16  52-57  fg:Gray
+17   2-11  fg:DarkGray
+17  14-57  fg:Gray
+18   2-11  fg:DarkGray
+19   2-11  fg:DarkGray
+19  14-16  fg:Cyan
+19  17-57  fg:DarkGray
+20   2-11  fg:DarkGray
+20  14-24  fg:Gray
+20  35-41  fg:Gray
+20  45-47  fg:DarkGray
+20  48-55  fg:Gray
+20  56-57  fg:LightCyan BOLD

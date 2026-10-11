@@ -1,0 +1,33 @@
+
+  Spotify / Search
+
+  / daft
+
+  One More Time                   3:07
+
+  PLAYLISTS
+  Daft Punk Radio             50 songs
+
+  Hide Away                  ▶ playing
+  Daya · Sit Still, Look Pretty
+
+  ━━──────────────────────────────────
+  0:15 / 3:11               volume 50%
+
+  ↵ play · → open · Esc back
+
+
+styles:
+ 1   2-11  fg:Gray
+ 1  12-17  fg:LightCyan BOLD
+ 5  28-29  fg:LightCyan BOLD
+ 5  30-37  fg:Gray
+ 7   2-10  fg:Gray
+ 8   2-37  fg:Black bg:Cyan BOLD
+10   2-10  BOLD
+10  29-37  fg:LightCyan BOLD
+11   2-37  fg:Gray
+13   2-3   fg:Cyan
+13   4-37  fg:DarkGray
+14   2-12  fg:Gray
+14  28-34  fg:Gray

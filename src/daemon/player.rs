@@ -183,10 +183,17 @@ fn handle(spirc: &Spirc, request: Request, end: &PlayerEnd) {
         Request::Repeat { mode } => spirc
             .repeat(mode == Repeat::Context)
             .and_then(|()| spirc.repeat_track(mode == Repeat::Track)),
-        Request::PlayContext { uri, index } => {
+        Request::PlayContext {
+            uri,
+            index,
+            track_uri,
+        } => {
+            let playing_track = track_uri
+                .map(PlayingTrack::Uri)
+                .or(index.map(PlayingTrack::Index));
             let options = LoadRequestOptions {
                 start_playing: true,
-                playing_track: index.map(PlayingTrack::Index),
+                playing_track,
                 ..LoadRequestOptions::default()
             };
             change(end, Change::Context(Some(uri.clone())));
@@ -194,11 +201,23 @@ fn handle(spirc: &Spirc, request: Request, end: &PlayerEnd) {
                 .activate()
                 .and_then(|()| spirc.load(LoadRequest::from_context_uri(uri, options)))
         }
+        Request::PlayTracks { uris, index } => {
+            let options = LoadRequestOptions {
+                start_playing: true,
+                playing_track: Some(PlayingTrack::Index(index)),
+                ..LoadRequestOptions::default()
+            };
+            change(end, Change::Context(None));
+            spirc
+                .activate()
+                .and_then(|()| spirc.load(LoadRequest::from_tracks(uris, options)))
+        }
         // Retry only matters without a session; the rest are answered elsewhere.
         Request::Retry
         | Request::Shutdown
         | Request::GetLibrary { .. }
         | Request::GetTracks { .. }
+        | Request::MoreTracks { .. }
         | Request::Search { .. } => Ok(()),
     };
     if let Err(error) = outcome {

@@ -53,6 +53,15 @@ pub enum Request {
         uri: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         index: Option<u32>,
+        /// Start at this track instead of at a position.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        track_uri: Option<String>,
+    },
+    /// Play these tracks in order, starting at `index`; for tracks with no playlist around
+    /// them, such as search results.
+    PlayTracks {
+        uris: Vec<String>,
+        index: u32,
     },
     /// Ask for the playlists. Answered from the cache when it is fresh, unless `refresh`.
     GetLibrary {
@@ -61,6 +70,10 @@ pub enum Request {
     },
     /// Ask for the tracks of a playlist, or of Liked Songs with `LIKED`.
     GetTracks {
+        uri: String,
+    },
+    /// Ask for the next page of a list already asked for.
+    MoreTracks {
         uri: String,
     },
     Search {
@@ -159,8 +172,11 @@ pub struct TrackList {
     /// The playlist these belong to, or `LIKED`.
     pub uri: String,
     pub tracks: Vec<Track>,
-    /// How many the playlist holds; more than `tracks` when it is long.
+    /// How many the playlist holds; more than `tracks` until all are loaded.
     pub total: u32,
+    /// True when there are no further pages to ask for.
+    #[serde(default)]
+    pub complete: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -212,7 +228,8 @@ mod tests {
         assert_eq!(
             encode(&Request::PlayContext {
                 uri: "spotify:playlist:x".into(),
-                index: Some(3)
+                index: Some(3),
+                track_uri: None
             })?,
             "{\"type\":\"play_context\",\"uri\":\"spotify:playlist:x\",\"index\":3}\n"
         );
@@ -221,7 +238,8 @@ mod tests {
             parsed,
             Request::PlayContext {
                 uri: "u".into(),
-                index: None
+                index: None,
+                track_uri: None
             }
         );
         Ok(())

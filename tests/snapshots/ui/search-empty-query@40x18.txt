@@ -1,9 +1,9 @@
 
-  Spotify
+  Spotify / Search
 
-  LIBRARY
-  ♥ Liked Songs              ▶ playing
+  / █
 
+  Type what you are looking for and p…
 
 
 
@@ -14,13 +14,13 @@
   ━━──────────────────────────────────
   0:15 / 3:11               volume 50%
 
-  ↵ play · Space pause · Esc
+  Enter search · Esc back
 
 
 styles:
- 1   2-8   fg:LightCyan BOLD
- 3   2-37  fg:Gray
- 4   2-37  fg:Black bg:Cyan BOLD
+ 1   2-11  fg:Gray
+ 1  12-17  fg:LightCyan BOLD
+ 5   2-37  fg:Gray
 10   2-10  BOLD
 10  29-37  fg:LightCyan BOLD
 11   2-37  fg:Gray
