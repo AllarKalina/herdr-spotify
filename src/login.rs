@@ -1,10 +1,10 @@
 //! Signing in for audio playback.
 //!
 //! librespot only accepts a sign-in made through its own Spotify client; a token from our own
-//! developer app is refused. The refresh token goes to the Keychain and nowhere else.
+//! developer app is refused. The refresh token is kept by `credentials`.
 
 use crate::paths::Paths;
-use crate::{Result, client, keychain};
+use crate::{Result, client, credentials};
 use librespot_core::config::SessionConfig;
 use librespot_oauth::{OAuthClient, OAuthClientBuilder};
 
@@ -32,7 +32,7 @@ pub fn run(paths: &Paths) -> Result<()> {
     if token.refresh_token.is_empty() {
         return Err("Spotify returned no refresh token; nothing was saved".into());
     }
-    keychain::set(keychain::AUDIO, &token.refresh_token)?;
+    credentials::set_audio(paths, &token.refresh_token)?;
     // A running daemon still holds the old session, or none; the next client starts a new one.
     client::stop(paths)?;
     println!("Signed in. Audio playback is ready on this computer.");

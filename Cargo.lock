@@ -859,7 +859,6 @@ dependencies = [
  "librespot-playback",
  "log",
  "rustix 1.1.5",
- "security-framework",
  "serde",
  "serde_json",
  "tokio",

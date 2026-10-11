@@ -1,5 +1,4 @@
-//! A private state directory and Keychain name per test, so tests never meet a real daemon or
-//! a real sign-in.
+//! A private state directory per test, so tests never meet a real daemon or a real sign-in.
 
 #![allow(dead_code)]
 
@@ -12,7 +11,6 @@ static NEXT: AtomicU32 = AtomicU32::new(0);
 
 pub struct Sandbox {
     pub dir: PathBuf,
-    keychain: String,
     idle_secs: Option<u32>,
 }
 
@@ -29,7 +27,6 @@ impl Sandbox {
         std::fs::create_dir_all(&dir).expect("create sandbox");
         Self {
             dir,
-            keychain: format!("herdr-spotify-test-{name}"),
             idle_secs: None,
         }
     }
@@ -52,7 +49,6 @@ impl Sandbox {
         command
             .args(args)
             .env("HERDR_PLUGIN_STATE_DIR", &self.dir)
-            .env("HERDR_SPOTIFY_KEYCHAIN", &self.keychain)
             .env_remove("HERDR_SPOTIFY_IDLE_SECS");
         if let Some(seconds) = self.idle_secs {
             command.env("HERDR_SPOTIFY_IDLE_SECS", seconds.to_string());

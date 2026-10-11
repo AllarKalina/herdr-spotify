@@ -3,8 +3,8 @@
 
 pub mod cli;
 pub mod client;
+pub mod credentials;
 pub mod daemon;
-pub mod keychain;
 pub mod login;
 pub mod paths;
 pub mod protocol;

@@ -78,7 +78,7 @@ smoke() {
     local dir=/tmp/hs-smoke-$$ binary=$ROOT/target/release/herdr-spotify status=0
     rm -rf "$dir"
     mkdir -p "$dir"
-    export HERDR_PLUGIN_STATE_DIR=$dir HERDR_SPOTIFY_KEYCHAIN=herdr-spotify-smoke-$$
+    export HERDR_PLUGIN_STATE_DIR=$dir
     "$binary" status | grep -qx 'Not signed in. Run: herdr-spotify login' || status=1
     [ -S "$dir/daemon.sock" ] || { echo "no socket"; status=1; }
     "$binary" daemon stop | grep -qx 'Stopped.' || status=1

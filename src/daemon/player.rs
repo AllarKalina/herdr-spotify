@@ -4,7 +4,7 @@ use super::PlayerEnd;
 use super::state::{self, Change};
 use crate::paths::Paths;
 use crate::protocol::{Repeat, Request, Status, Track, now_ms};
-use crate::{Result, keychain, login};
+use crate::{Result, credentials, login};
 use librespot_connect::{ConnectConfig, LoadRequest, LoadRequestOptions, PlayingTrack, Spirc};
 use librespot_core::{authentication::Credentials, config::SessionConfig, session::Session};
 use librespot_metadata::audio::{AudioItem, UniqueFields};
@@ -92,7 +92,7 @@ pub async fn run(mut end: PlayerEnd, paths: Paths) {
 async fn connect(paths: &Paths) -> std::result::Result<Connected, Failure> {
     let unavailable = |error: &dyn std::fmt::Display| Failure::Unavailable(error.to_string());
 
-    let Some(refresh_token) = keychain::get(keychain::AUDIO).map_err(|e| unavailable(&e))? else {
+    let Some(refresh_token) = credentials::audio(paths).map_err(|e| unavailable(&e))? else {
         return Err(Failure::SignedOut);
     };
     let session_config = SessionConfig {
@@ -107,14 +107,14 @@ async fn connect(paths: &Paths) -> std::result::Result<Connected, Failure> {
             let text = error.to_string();
             if text.contains("invalid_grant") {
                 // Spotify revoked the sign-in; only a new login helps.
-                let _ = keychain::delete(keychain::AUDIO);
+                let _ = credentials::forget_audio(paths);
                 Failure::SignedOut
             } else {
                 Failure::Unavailable(format!("Cannot reach Spotify: {text}"))
             }
         })?;
     if !token.refresh_token.is_empty() && token.refresh_token != refresh_token {
-        keychain::set(keychain::AUDIO, &token.refresh_token).map_err(|e| unavailable(&e))?;
+        credentials::set_audio(paths, &token.refresh_token).map_err(|e| unavailable(&e))?;
     }
 
     let session = Session::new(session_config, None);

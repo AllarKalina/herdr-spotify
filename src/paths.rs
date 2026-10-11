@@ -1,4 +1,4 @@
-//! Where the daemon keeps its files. Nothing here holds a credential; those live in the Keychain.
+//! Where the daemon keeps its files: one directory, private to the user.
 
 use crate::Result;
 use std::fs;
@@ -63,6 +63,11 @@ impl Paths {
 
     pub fn log(&self) -> PathBuf {
         self.state.join("daemon.log")
+    }
+
+    /// The audio sign-in; see `credentials`.
+    pub fn audio_credentials(&self) -> PathBuf {
+        self.state.join("audio-credentials")
     }
 
     /// The identity this computer presents to Spotify, kept so restarts are the same device.
