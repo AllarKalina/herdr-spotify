@@ -2,7 +2,8 @@
 
 use crate::client::{self, Connection};
 use crate::paths::Paths;
-use crate::protocol::{Message, Repeat, Request, State, Status, now_ms};
+use crate::protocol::{LIKED, Message, Repeat, Request, State, Status, Track, now_ms};
+use crate::web::catalog::LIBRARY_TTL_MS;
 use crate::{Result, daemon, login, ui};
 use std::time::{Duration, Instant};
 
@@ -17,6 +18,9 @@ Usage: herdr-spotify <command>
         play | pause | toggle | next | previous
         seek <seconds> | volume <0-100> | shuffle <on|off> | repeat <off|context|track>
         play-context <spotify-uri> [track-index]
+  library [--refresh]         List your playlists
+  tracks <playlist-uri|liked> List the tracks of a playlist or of Liked Songs
+  search <words>              Search tracks and playlists
   daemon                      Run the player in the foreground
   daemon stop                 Stop the background player";
 
@@ -46,6 +50,14 @@ pub fn run(args: Vec<String>) -> Result<()> {
         ["status"] => status(false),
         ["status", "--json"] => status(true),
         ["ctl", action @ ..] => ctl(&parse_action(action)?),
+        ["library"] => browse(Request::GetLibrary { refresh: false }),
+        ["library", "--refresh"] => browse(Request::GetLibrary { refresh: true }),
+        ["tracks", uri] => browse(Request::GetTracks {
+            uri: (*uri).to_owned(),
+        }),
+        ["search", words @ ..] if !words.is_empty() => browse(Request::Search {
+            query: words.join(" "),
+        }),
         _ => Err(format!("Unknown command: {}\n\n{USAGE}", args.join(" ")).into()),
     }
 }
@@ -127,12 +139,94 @@ fn settled(
         match connection.read_within(wait)? {
             Some(Message::State(next)) => state = next,
             Some(Message::Notice { text }) => return Err(text.into()),
-            Some(Message::Hello { .. }) => {}
+            Some(_) => {}
             None => break,
         }
         wait = quiet.min(deadline.saturating_duration_since(Instant::now()));
     }
     Ok(state)
+}
+
+/// How long a browsing command waits for Spotify's answer.
+const BROWSE_WAIT: Duration = Duration::from_secs(30);
+
+/// Sends a browsing request and prints the answer.
+fn browse(request: Request) -> Result<()> {
+    let request = match request {
+        Request::GetTracks { uri } if uri == "liked" => Request::GetTracks { uri: LIKED.into() },
+        other => other,
+    };
+    let mut connection = Connection::open(&Paths::from_env()?)?;
+    connection.send(&request)?;
+    let deadline = Instant::now() + BROWSE_WAIT;
+    let mut shown = false;
+    // A stale library is sent first and the fresh one after it; print the last one to arrive.
+    while let Some(message) =
+        connection.read_within(deadline.saturating_duration_since(Instant::now()))?
+    {
+        // The daemon sends a second library when the first was stale or a refresh was asked for.
+        let mut follow_up = false;
+        let lines = match (&request, message) {
+            (Request::GetLibrary { .. }, Message::Library(library)) => {
+                if !library.signed_in {
+                    return Err("Browsing needs its own sign-in. Run: herdr-spotify login".into());
+                }
+                let age = now_ms().saturating_sub(library.fetched_at_ms);
+                let refresh = matches!(request, Request::GetLibrary { refresh: true });
+                follow_up = !shown && (refresh || age >= LIBRARY_TTL_MS);
+                let mut lines = vec![format!("Liked Songs · {} songs", library.liked_total)];
+                lines.extend(library.playlists.iter().map(|playlist| {
+                    format!(
+                        "{} · {} songs · {}  {}",
+                        playlist.name, playlist.total, playlist.owner, playlist.uri
+                    )
+                }));
+                lines
+            }
+            (Request::GetTracks { .. }, Message::Tracks(list)) => {
+                let mut lines: Vec<String> = list.tracks.iter().map(track_line).collect();
+                if usize::try_from(list.total).unwrap_or(usize::MAX) > list.tracks.len() {
+                    lines.push(format!("… {} of {} shown", list.tracks.len(), list.total));
+                }
+                lines
+            }
+            (Request::Search { .. }, Message::SearchResults(results)) => {
+                let mut lines: Vec<String> = results.tracks.iter().map(track_line).collect();
+                lines.extend(results.playlists.iter().map(|playlist| {
+                    format!(
+                        "playlist · {} · {}  {}",
+                        playlist.name, playlist.owner, playlist.uri
+                    )
+                }));
+                lines
+            }
+            (_, Message::Notice { text }) => return Err(text.into()),
+            _ => continue,
+        };
+        if shown {
+            println!("--- updated");
+        }
+        println!("{}", lines.join("\n"));
+        shown = true;
+        if !follow_up {
+            break;
+        }
+    }
+    if shown {
+        Ok(())
+    } else {
+        Err("Spotify did not answer in time".into())
+    }
+}
+
+fn track_line(track: &Track) -> String {
+    format!(
+        "{} — {} · {}  {}",
+        track.name,
+        track.artists.join(", "),
+        clock(track.duration_ms),
+        track.uri
+    )
 }
 
 fn parse_action(action: &[&str]) -> Result<Request> {

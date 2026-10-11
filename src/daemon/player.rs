@@ -4,7 +4,7 @@ use super::PlayerEnd;
 use super::cover;
 use super::state::{self, Change};
 use crate::paths::Paths;
-use crate::protocol::{Repeat, Request, Status, Track, now_ms};
+use crate::protocol::{Message, Repeat, Request, Status, Track, now_ms};
 use crate::{Result, credentials, login};
 use librespot_connect::{ConnectConfig, LoadRequest, LoadRequestOptions, PlayingTrack, Spirc};
 use librespot_core::{authentication::Credentials, config::SessionConfig, session::Session};
@@ -72,7 +72,7 @@ pub async fn run(mut end: PlayerEnd, paths: Paths) {
                 };
                 log::warn!("no Spotify session: {problem}");
                 if pending.take().is_some() {
-                    let _ = end.notices.send(problem.clone());
+                    notice(&end, problem.clone());
                 }
                 let problem = (status == Status::Unavailable).then_some(problem);
                 change(&end, Change::Status(status, problem));
@@ -194,12 +194,16 @@ fn handle(spirc: &Spirc, request: Request, end: &PlayerEnd) {
                 .activate()
                 .and_then(|()| spirc.load(LoadRequest::from_context_uri(uri, options)))
         }
-        // Retry only matters without a session; the server answers Shutdown itself.
-        Request::Retry | Request::Shutdown => Ok(()),
+        // Retry only matters without a session; the rest are answered elsewhere.
+        Request::Retry
+        | Request::Shutdown
+        | Request::GetLibrary { .. }
+        | Request::GetTracks { .. }
+        | Request::Search { .. } => Ok(()),
     };
     if let Err(error) = outcome {
         log::warn!("request failed: {error}");
-        let _ = end.notices.send(format!("Spotify request failed: {error}"));
+        notice(end, format!("Spotify request failed: {error}"));
     }
 }
 
@@ -220,12 +224,16 @@ fn report(event: PlayerEvent, end: &PlayerEnd, paths: &Paths) {
             Change::Repeat(state::repeat(context, track))
         }
         PlayerEvent::Unavailable { track_id, .. } => {
-            let _ = end.notices.send(format!("Track unavailable: {track_id}"));
+            notice(end, format!("Track unavailable: {track_id}"));
             return;
         }
         _ => return,
     };
     change(end, reported);
+}
+
+fn notice(end: &PlayerEnd, text: String) {
+    let _ = end.events.send(Message::Notice { text });
 }
 
 fn change(end: &PlayerEnd, change: Change) {

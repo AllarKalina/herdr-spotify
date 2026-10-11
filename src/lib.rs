@@ -3,12 +3,14 @@
 
 pub mod cli;
 pub mod client;
+pub mod config;
 pub mod credentials;
 pub mod daemon;
 pub mod login;
 pub mod paths;
 pub mod protocol;
 pub mod ui;
+pub mod web;
 
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
 pub type Result<T> = std::result::Result<T, Error>;

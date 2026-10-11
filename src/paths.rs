@@ -75,6 +75,21 @@ impl Paths {
         self.state.join("covers")
     }
 
+    /// The browsing sign-in; see `credentials`.
+    pub fn web_credentials(&self) -> PathBuf {
+        self.state.join("web-credentials")
+    }
+
+    /// When Spotify's rate limit lets requests through again, as Unix milliseconds.
+    pub fn web_cooldown(&self) -> PathBuf {
+        self.state.join("web-cooldown")
+    }
+
+    /// Playlists and track lists as last fetched.
+    pub fn cache(&self) -> PathBuf {
+        self.state.join("cache")
+    }
+
     /// The identity this computer presents to Spotify, kept so restarts are the same device.
     pub fn device_id(&self) -> PathBuf {
         self.state.join("device-id")

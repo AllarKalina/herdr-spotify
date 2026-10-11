@@ -1,10 +1,11 @@
-//! Signing in for audio playback.
+//! Signing in: first for audio playback, then for browsing.
 //!
 //! librespot only accepts a sign-in made through its own Spotify client; a token from our own
 //! developer app is refused. The refresh token is kept by `credentials`.
 
+use crate::config::{self, Config};
 use crate::paths::Paths;
-use crate::{Result, client, credentials};
+use crate::{Result, client, credentials, web};
 use librespot_core::config::SessionConfig;
 use librespot_oauth::{OAuthClient, OAuthClientBuilder};
 
@@ -33,8 +34,20 @@ pub fn run(paths: &Paths) -> Result<()> {
         return Err("Spotify returned no refresh token; nothing was saved".into());
     }
     credentials::set_audio(paths, &token.refresh_token)?;
-    // A running daemon still holds the old session, or none; the next client starts a new one.
-    client::stop(paths)?;
     println!("Signed in. Audio playback is ready on this computer.");
+
+    let config = Config::load()?;
+    if config.has_app() {
+        println!("Opening Spotify once more, to sign in for browsing playlists and search.");
+        web::auth::login(paths, &config)?;
+        println!("Signed in. Playlists and search are ready.");
+    } else {
+        println!(
+            "Playlists and search need a Spotify developer app: set client_id and redirect_uri in {}",
+            config::path()?.display()
+        );
+    }
+    // A running daemon still holds the old sessions, or none; the next client starts anew.
+    client::stop(paths)?;
     Ok(())
 }

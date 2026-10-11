@@ -4,10 +4,14 @@ mod cover;
 pub mod player;
 pub mod server;
 pub mod state;
+pub mod web;
 
 use crate::Result;
+use crate::config::Config;
 use crate::paths::Paths;
-use crate::protocol::{Request, State};
+use crate::protocol::{Message, Request, State};
+use crate::web::catalog::Catalog;
+use crate::web::{Api, Endpoints};
 use std::fs::{self, File, TryLockError};
 use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
@@ -22,38 +26,56 @@ const IDLE: Duration = Duration::from_secs(15 * 60);
 const LOCK_WAIT: Duration = Duration::from_secs(4);
 const PLAYER_STOP_WAIT: Duration = Duration::from_secs(3);
 
-/// The server's side of the player: where requests go and where state comes from.
+/// The server's side of the daemon: where requests go and where state and answers come from.
 #[derive(Clone)]
 pub struct Hub {
+    /// Playback requests, for the player.
     pub requests: mpsc::Sender<Request>,
+    /// Browsing requests, for the Web API.
+    pub web: mpsc::Sender<Request>,
     pub state: watch::Receiver<State>,
-    pub notices: broadcast::Sender<String>,
+    /// Notices and browsing answers, sent to every client.
+    pub events: broadcast::Sender<Message>,
 }
 
 /// The player's side of the same channels.
 pub struct PlayerEnd {
     pub requests: mpsc::Receiver<Request>,
     pub state: watch::Sender<State>,
-    pub notices: broadcast::Sender<String>,
+    pub events: broadcast::Sender<Message>,
     pub stop: Arc<Notify>,
 }
 
-pub fn hub() -> (Hub, PlayerEnd) {
+/// The Web API's side.
+pub struct WebEnd {
+    pub requests: mpsc::Receiver<Request>,
+    pub events: broadcast::Sender<Message>,
+    pub stop: Arc<Notify>,
+}
+
+pub fn hub() -> (Hub, PlayerEnd, WebEnd) {
     let (requests_tx, requests_rx) = mpsc::channel(32);
+    let (web_tx, web_rx) = mpsc::channel(32);
     let (state_tx, state_rx) = watch::channel(State::default());
-    let (notices, _) = broadcast::channel(32);
+    let (events, _) = broadcast::channel(32);
     let hub = Hub {
         requests: requests_tx,
+        web: web_tx,
         state: state_rx,
-        notices: notices.clone(),
+        events: events.clone(),
     };
-    let end = PlayerEnd {
+    let player = PlayerEnd {
         requests: requests_rx,
         state: state_tx,
-        notices,
+        events: events.clone(),
         stop: Arc::new(Notify::new()),
     };
-    (hub, end)
+    let web = WebEnd {
+        requests: web_rx,
+        events,
+        stop: Arc::new(Notify::new()),
+    };
+    (hub, player, web)
 }
 
 /// Runs until asked to stop, signalled, or idle. Returns at once when a daemon already runs.
@@ -85,16 +107,20 @@ pub fn run(paths: &Paths, detached: bool) -> Result<()> {
 
 async fn serve(paths: &Paths) -> Result<()> {
     let listener = bind(paths)?;
-    let (hub, end) = hub();
-    let stop_player = end.stop.clone();
-    let player = tokio::spawn(player::run(end, paths.clone()));
+    let (hub, player_end, web_end) = hub();
+    let (stop_player, stop_web) = (player_end.stop.clone(), web_end.stop.clone());
+    let player = tokio::spawn(player::run(player_end, paths.clone()));
+    let api = Api::new(paths.clone(), Config::load()?, Endpoints::from_env())?;
+    let web = tokio::spawn(web::run(web_end, Catalog::new(api)));
 
     let shutdown = Arc::new(Notify::new());
     tokio::spawn(wait_for_signal(shutdown.clone()));
     server::serve(listener, hub, shutdown, idle_period()).await;
 
     stop_player.notify_one();
+    stop_web.notify_one();
     let _ = tokio::time::timeout(PLAYER_STOP_WAIT, player).await;
+    web.abort();
     Ok(())
 }
 

@@ -32,7 +32,9 @@ async fn stand_in_player(mut end: PlayerEnd) {
             Request::Pause => end.state.send_modify(|state| state.playing = false),
             Request::Volume { percent } => end.state.send_modify(|state| state.volume = percent),
             Request::Next => {
-                let _ = end.notices.send("Track unavailable".into());
+                let _ = end.events.send(Message::Notice {
+                    text: "Track unavailable".into(),
+                });
             }
             _ => {}
         }
@@ -48,7 +50,7 @@ fn start(idle: Duration) -> Server {
     let socket = PathBuf::from("/tmp").join(name);
     let _ = std::fs::remove_file(&socket);
     let listener = UnixListener::bind(&socket).expect("bind");
-    let (hub, end) = daemon::hub();
+    let (hub, end, _web) = daemon::hub();
     tokio::spawn(stand_in_player(end));
     let shutdown = Arc::new(Notify::new());
     let task = tokio::spawn(server::serve(listener, hub, shutdown.clone(), idle));

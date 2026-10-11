@@ -19,6 +19,9 @@ pub enum Message {
         pid: u32,
     },
     State(State),
+    Library(Library),
+    Tracks(TrackList),
+    SearchResults(SearchResults),
     Notice {
         text: String,
     },
@@ -50,6 +53,18 @@ pub enum Request {
         uri: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         index: Option<u32>,
+    },
+    /// Ask for the playlists. Answered from the cache when it is fresh, unless `refresh`.
+    GetLibrary {
+        #[serde(default)]
+        refresh: bool,
+    },
+    /// Ask for the tracks of a playlist, or of Liked Songs with `LIKED`.
+    GetTracks {
+        uri: String,
+    },
+    Search {
+        query: String,
     },
     /// Try again to reach Spotify after a failure or a sign-in.
     Retry,
@@ -112,6 +127,47 @@ pub struct Track {
     /// The cover image as a local JPEG file, once the daemon has fetched it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cover_path: Option<String>,
+}
+
+/// The pseudo-URI that asks for the tracks of Liked Songs.
+pub const LIKED: &str = "spotify:collection";
+
+/// What there is to play, as far as the Web API has told us.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Library {
+    /// False until `herdr-spotify login` has signed in for browsing.
+    pub signed_in: bool,
+    pub playlists: Vec<Playlist>,
+    pub liked_total: u32,
+    /// Unix time in milliseconds when Spotify was last asked.
+    pub fetched_at_ms: u64,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Playlist {
+    pub uri: String,
+    pub name: String,
+    pub owner: String,
+    pub total: u32,
+    /// Changes whenever the playlist's contents do.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub snapshot_id: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TrackList {
+    /// The playlist these belong to, or `LIKED`.
+    pub uri: String,
+    pub tracks: Vec<Track>,
+    /// How many the playlist holds; more than `tracks` when it is long.
+    pub total: u32,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SearchResults {
+    pub query: String,
+    pub tracks: Vec<Track>,
+    pub playlists: Vec<Playlist>,
 }
 
 impl State {

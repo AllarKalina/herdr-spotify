@@ -2,6 +2,8 @@
 
 #![allow(dead_code)]
 
+pub mod fake_spotify;
+
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -12,6 +14,7 @@ static NEXT: AtomicU32 = AtomicU32::new(0);
 pub struct Sandbox {
     pub dir: PathBuf,
     idle_secs: Option<u32>,
+    spotify: Option<String>,
 }
 
 impl Sandbox {
@@ -28,11 +31,23 @@ impl Sandbox {
         Self {
             dir,
             idle_secs: None,
+            spotify: None,
         }
     }
 
     pub fn idle_after(mut self, seconds: u32) -> Self {
         self.idle_secs = Some(seconds);
+        self
+    }
+
+    /// Signs the sandbox in for browsing against a stand-in Spotify at `url`.
+    pub fn browsing(mut self, url: &str) -> Self {
+        std::fs::create_dir_all(self.dir.join("config")).expect("config dir");
+        let config =
+            "client_id = \"test-client\"\nredirect_uri = \"http://127.0.0.1:1/callback\"\n";
+        std::fs::write(self.dir.join("config/config.toml"), config).expect("config");
+        std::fs::write(self.dir.join("web-credentials"), "refresh-1").expect("credentials");
+        self.spotify = Some(url.to_owned());
         self
     }
 
@@ -49,7 +64,15 @@ impl Sandbox {
         command
             .args(args)
             .env("HERDR_PLUGIN_STATE_DIR", &self.dir)
+            // Never the real config: a test must not learn the real developer app.
+            .env("HERDR_PLUGIN_CONFIG_DIR", self.dir.join("config"))
+            .env_remove("HERDR_SPOTIFY_API_URL")
+            .env_remove("HERDR_SPOTIFY_ACCOUNTS_URL")
             .env_remove("HERDR_SPOTIFY_IDLE_SECS");
+        if let Some(url) = &self.spotify {
+            command.env("HERDR_SPOTIFY_API_URL", format!("{url}/v1"));
+            command.env("HERDR_SPOTIFY_ACCOUNTS_URL", url);
+        }
         if let Some(seconds) = self.idle_secs {
             command.env("HERDR_SPOTIFY_IDLE_SECS", seconds.to_string());
         }

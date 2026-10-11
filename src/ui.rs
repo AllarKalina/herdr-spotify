@@ -99,7 +99,11 @@ impl App {
                     .min(library::rows(&self.state).len().saturating_sub(1));
             }
             Message::Notice { text } => self.notify(text),
-            Message::Hello { .. } => {}
+            // The library screens arrive with the next step; until then these are ignored.
+            Message::Hello { .. }
+            | Message::Library(_)
+            | Message::Tracks(_)
+            | Message::SearchResults(_) => {}
         }
     }
 

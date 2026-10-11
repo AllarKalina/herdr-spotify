@@ -156,3 +156,47 @@ fn the_state_directory_and_socket_are_private() {
     assert_eq!(mode(&sandbox.dir), 0o700);
     assert_eq!(mode(&sandbox.socket()), 0o600);
 }
+
+#[test]
+fn browsing_works_end_to_end_and_survives_a_daemon_restart_without_new_calls() {
+    let spotify = common::fake_spotify::FakeSpotify::start();
+    let sandbox = Sandbox::new().browsing(&spotify.url);
+
+    let listing = sandbox.ok(&["library"]);
+    assert!(listing.starts_with("Liked Songs · 3 songs"), "{listing}");
+    assert!(
+        listing.contains("Focus · 3 songs · Allar  spotify:playlist:p1"),
+        "{listing}"
+    );
+    assert_eq!(spotify.api_calls(), 2, "{:#?}", spotify.calls());
+
+    let tracks = sandbox.ok(&["tracks", "spotify:playlist:p1"]);
+    assert!(
+        tracks.starts_with("First — Artist · 3:00  spotify:track:t1"),
+        "{tracks}"
+    );
+    assert!(tracks.ends_with("… 2 of 3 shown"), "{tracks}");
+    assert!(
+        sandbox
+            .ok(&["search", "found", "it"])
+            .contains("playlist · Found List")
+    );
+    let warm = spotify.calls().len();
+
+    // A new daemon answers the same questions from disk.
+    assert_eq!(sandbox.ok(&["daemon", "stop"]), "Stopped.");
+    assert_eq!(sandbox.ok(&["library"]), listing);
+    assert_eq!(sandbox.ok(&["tracks", "spotify:playlist:p1"]), tracks);
+    assert_eq!(spotify.calls().len(), warm, "{:#?}", spotify.calls());
+}
+
+#[test]
+fn browsing_without_a_sign_in_says_how_to_get_one() {
+    let sandbox = Sandbox::new();
+    let output = sandbox.run(&["library"]);
+    assert!(!output.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&output.stderr).trim(),
+        "Browsing needs its own sign-in. Run: herdr-spotify login"
+    );
+}

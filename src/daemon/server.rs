@@ -55,7 +55,7 @@ async fn client(stream: UnixStream, hub: Hub, shutdown: &Notify) -> Result<()> {
     let (read, mut write) = stream.into_split();
     let mut lines = BufReader::new(read).lines();
     let mut state = hub.state.clone();
-    let mut notices = hub.notices.subscribe();
+    let mut events = hub.events.subscribe();
 
     let hello = Message::Hello {
         protocol: PROTOCOL,
@@ -75,8 +75,8 @@ async fn client(stream: UnixStream, hub: Hub, shutdown: &Notify) -> Result<()> {
                 let snapshot = state.borrow_and_update().clone();
                 send(&mut write, &Message::State(snapshot)).await?;
             }
-            notice = notices.recv() => match notice {
-                Ok(text) => send(&mut write, &Message::Notice { text }).await?,
+            event = events.recv() => match event {
+                Ok(message) => send(&mut write, &message).await?,
                 Err(RecvError::Lagged(_)) => {}
                 Err(RecvError::Closed) => break,
             },
@@ -89,7 +89,12 @@ async fn client(stream: UnixStream, hub: Hub, shutdown: &Notify) -> Result<()> {
                         break;
                     }
                     Ok(request) => {
-                        if hub.requests.send(request).await.is_err() {
+                        let browsing = matches!(
+                            request,
+                            Request::GetLibrary { .. } | Request::GetTracks { .. } | Request::Search { .. }
+                        );
+                        let target = if browsing { &hub.web } else { &hub.requests };
+                        if target.send(request).await.is_err() {
                             break;
                         }
                     }
