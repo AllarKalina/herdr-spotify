@@ -12,7 +12,7 @@ Usage: herdr-spotify <command>
 
   open                        Open the player popup in Herdr
   tui                         Run the player interface in this terminal
-  login                       Sign in to Spotify for audio playback on this computer
+  login                       Sign in to Spotify on this computer: audio, then browsing
   status [--json]             Show what is playing (starts the daemon if needed)
   ctl <action>                Control playback:
         play | pause | toggle | next | previous
