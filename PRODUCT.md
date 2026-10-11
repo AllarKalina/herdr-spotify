@@ -40,8 +40,8 @@ Part of the same family as the Personal Inbox: same header position, footer shor
 ## Evidence on Hand
 
 - The daemon, protocol, CLI and tests are in this repository. The design spec is local and not committed.
-- The Inbox's `DESIGN.md` (`https://github.com/AllarKalina/herdr-inbox/blob/main/DESIGN.md`) is the visual authority this plugin inherits.
-- `Clipify` is the earlier Spotify terminal app whose screens (library sidebar, track list, bottom player, search) informed this one. No code is shared.
+- The Personal Inbox's [DESIGN.md](https://github.com/AllarKalina/herdr-inbox/blob/main/DESIGN.md) is the visual authority this plugin inherits.
+- Clipify, an earlier Spotify terminal app, informed the screens (library sidebar, track list, bottom player, search). No code is shared.
 
 ## Product Principles
 

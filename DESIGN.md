@@ -38,7 +38,7 @@ components:
 
 **The list leads; the player is five rows.** The popup is opened to choose music and closed again, so the things to play take the canvas and the player sits docked above the shortcut line. It refuses the music-app habit of a large now-playing card.
 
-This plugin inherits the Personal Inbox's world (`https://github.com/AllarKalina/herdr-inbox/blob/main/DESIGN.md`) and does not restate it: the host terminal owns the translucent background, the palette and the font; Ratatui emits colour roles, never hex values; nothing is bordered in the normal flow. The hex values above record how those roles resolve in the current Ghostty profile. Where this file is silent, the Inbox's rules apply.
+This plugin inherits the Personal Inbox's world ([its DESIGN.md](https://github.com/AllarKalina/herdr-inbox/blob/main/DESIGN.md)) and does not restate it: the host terminal owns the translucent background, the palette and the font; Ratatui emits colour roles, never hex values; nothing is bordered in the normal flow. The hex values above record how those roles resolve in the current Ghostty profile. Where this file is silent, the Inbox's rules apply.
 
 ## Layout
 

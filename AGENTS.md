@@ -12,5 +12,5 @@
 - UI work goes through Impeccable with `--target` a file in this repo; `PRODUCT.md` and `DESIGN.md` are the context. The look inherits the Personal Inbox's.
 - After touching `src/daemon/player.rs` or `src/daemon/playback.rs`, check by hand with real audio: play, pause, skip, stop the daemon, resume. Tell Allar before playing audio on his machine.
 - Implement only explicitly requested changes. Ask Allar before adding features, options, or scope.
-- Commits: use `the workspace committer script`.
-- The design spec is local content in `a local folder outside this repository`. Never commit or upload it.
+- Commits: Conventional Commits, made with the workspace's `committer` script as the workspace `AGENTS.md` says.
+- The design spec is local content kept outside this repository. Never commit or upload it.

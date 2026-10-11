@@ -22,10 +22,10 @@ Herdr clones the repository and runs the manifest's locked release build for tha
 To work on the plugin, link a local clone instead:
 
 ```sh
-git clone https://github.com/AllarKalina/herdr-spotify.git herdr-spotify
+git clone https://github.com/AllarKalina/herdr-spotify.git
 cd herdr-spotify
 cargo build --release --locked
-herdr plugin link herdr-spotify
+herdr plugin link "$PWD"
 ```
 
 A linked copy must be unlinked before that Mac switches to a managed install.
@@ -54,7 +54,7 @@ description = "Open Spotify player"
 ~/.config/herdr/plugins/github/personal.spotify-*/target/release/herdr-spotify login
 ```
 
-That is the managed install's binary. With a local clone it is `target/release/herdr-spotify login`.
+That is the managed install's binary. With a local clone it is `target/release/herdr-spotify login`, run from the clone.
 
 The browser opens twice, once for each sign-in:
 
@@ -156,7 +156,7 @@ Deleting the directory signs this computer out and clears the caches. The tokens
 - **The browsing sign-in fails to start.** Something else is using the port in `redirect_uri`, or the URI is not registered on the developer app.
 - **"Spotify is rate limiting requests".** Wait the stated time. Cached lists still work.
 - **The popup shows stale state after a rebuild.** It should not: a rebuilt binary replaces the running daemon on the next command. `herdr-spotify daemon stop` forces it.
-- **The manifest changed** in a linked clone. Run `herdr plugin link herdr-spotify` again and reopen the popup.
+- **The manifest changed** in a linked clone. Run `herdr plugin link` on the clone again and reopen the popup.
 
 ## Limits
 
