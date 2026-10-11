@@ -175,4 +175,4 @@ scripts/regress --update-snapshots  # re-record UI snapshots after an intended U
 
 The gate runs formatting, lints, the tests, UI snapshot comparison, a 500-line limit per Rust file, a check that no token reaches a log, the release build and a smoke run. It needs no Spotify account: the Web API is replaced by a stand-in that counts requests, which is how the budget above is tested. Audio output is checked by hand.
 
-`tests/snapshots/ui/` holds a snapshot of every popup state at 100×35, 60×24 and 40×18. `PRODUCT.md` says what the plugin is for and `DESIGN.md` how it looks.
+`tests/snapshots/ui/` holds a snapshot of every popup state at 100×35, 60×24 and 40×18. `PRODUCT.md` says what the plugin is for, `DESIGN.md` how it looks, and [ARCHITECTURE.md](ARCHITECTURE.md) how the code is laid out and where each kind of change goes.
